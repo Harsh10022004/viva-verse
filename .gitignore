@@ -1,0 +1,42 @@
+# =====================
+# Environment / Secrets
+# =====================
+.env
+.env.*
+!.env.example
+
+# =====================
+# Python (Backend)
+# =====================
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+.eggs/
+.pytest_cache/
+.mypy_cache/
+.venv/
+venv/
+env/
+ENV/
+pytest_out.txt
+
+# =====================
+# Node / Frontend
+# =====================
+node_modules/
+frontend/dist/
+
+# =====================
+# OS / Editor
+# =====================
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp
+*.swo
