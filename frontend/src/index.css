@@ -1,0 +1,157 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ── Global Styles ── */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  background: #0a0e1a;
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+/* ── Scrollbar ── */
+::-webkit-scrollbar {
+  width: 6px;
+}
+::-webkit-scrollbar-track {
+  background: #111827;
+}
+::-webkit-scrollbar-thumb {
+  background: #4c6ef5;
+  border-radius: 3px;
+}
+
+/* ── Glassmorphism Card ── */
+.glass {
+  background: rgba(26, 32, 53, 0.6);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(92, 124, 250, 0.15);
+}
+
+/* ── Gradient Text ── */
+.gradient-text {
+  background: linear-gradient(135deg, #748ffc, #5c7cfa, #9775fa, #da77f2);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* ── Glow Button ── */
+.btn-glow {
+  position: relative;
+  background: linear-gradient(135deg, #4c6ef5, #5c7cfa);
+  transition: all 0.3s ease;
+  overflow: hidden;
+}
+.btn-glow::before {
+  content: '';
+  position: absolute;
+  top: -2px; left: -2px; right: -2px; bottom: -2px;
+  background: linear-gradient(135deg, #4c6ef5, #9775fa, #da77f2, #4c6ef5);
+  border-radius: inherit;
+  z-index: -1;
+  filter: blur(8px);
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+.btn-glow:hover::before {
+  opacity: 1;
+}
+.btn-glow:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 30px rgba(76, 110, 245, 0.4);
+}
+
+/* ── Terminal Cursor Blink ── */
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+.cursor-blink {
+  animation: blink 1s infinite;
+}
+
+/* ── Fade In Up ── */
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(30px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.fade-in-up {
+  animation: fadeInUp 0.6s ease-out forwards;
+}
+
+/* ── Score Pop ── */
+@keyframes scorePop {
+  0% { transform: scale(0); opacity: 0; }
+  60% { transform: scale(1.2); }
+  100% { transform: scale(1); opacity: 1; }
+}
+.score-pop {
+  animation: scorePop 0.5s ease-out forwards;
+}
+
+/* ── Typing effect ── */
+@keyframes typing {
+  from { width: 0; }
+  to { width: 100%; }
+}
+
+/* ── Particle background ── */
+.bg-particles {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  background:
+    radial-gradient(ellipse at 20% 50%, rgba(76, 110, 245, 0.08) 0%, transparent 50%),
+    radial-gradient(ellipse at 80% 20%, rgba(151, 117, 250, 0.06) 0%, transparent 50%),
+    radial-gradient(ellipse at 50% 80%, rgba(218, 119, 242, 0.04) 0%, transparent 50%);
+  pointer-events: none;
+}
+
+/* ── Drop zone ── */
+.drop-zone {
+  border: 2px dashed rgba(92, 124, 250, 0.3);
+  transition: all 0.3s ease;
+}
+.drop-zone:hover,
+.drop-zone.drag-over {
+  border-color: #5c7cfa;
+  background: rgba(92, 124, 250, 0.05);
+  box-shadow: 0 0 30px rgba(92, 124, 250, 0.1);
+}
+
+/* ── Heatmap cell ── */
+.heatmap-cell {
+  transition: all 0.3s ease;
+  border-radius: 6px;
+}
+.heatmap-cell:hover {
+  transform: scale(1.15);
+  z-index: 10;
+}
+
+/* ── Loading spinner ── */
+@keyframes spin-slow {
+  to { transform: rotate(360deg); }
+}
+.loader-ring {
+  width: 48px;
+  height: 48px;
+  border: 3px solid rgba(92, 124, 250, 0.2);
+  border-top-color: #5c7cfa;
+  border-radius: 50%;
+  animation: spin-slow 1s linear infinite;
+}
