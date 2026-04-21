@@ -8,9 +8,10 @@ from fastapi import APIRouter, UploadFile, File, HTTPException
 import re
 from collections import Counter
 from app.utils.constants import STOPWORDS
-from app.schemas.models import SubmitAnswerRequest, FinalizeRequest, ConfirmUploadRequest
+from app.schemas.models import SubmitAnswerRequest, FinalizeRequest, ConfirmUploadRequest, StartVivaRequest
 from app.services.parser_service import DocumentStore, extract_text_from_pdf, chunk_text, generate_questions
 from app.services.llm_service import evaluate_answer, SBERTSingleton
+from app.services.agent_orchestrator import SupervisorAgent
 
 logger = logging.getLogger(__name__)
 
@@ -53,6 +54,14 @@ async def upload_documents(files: List[UploadFile] = File(...)):
 
         try:
             content = await f.read()
+            
+            import os
+            os.makedirs("temp_uploads", exist_ok=True)
+            pdf_path = os.path.join("temp_uploads", f"{upload_id}_{f.filename}")
+            with open(pdf_path, "wb") as pdf_file:
+                pdf_file.write(content)
+            doc_store.pdf_paths[f.filename] = pdf_path
+
             pages = extract_text_from_pdf(content)
             chunks, labels = chunk_text(pages)
             
@@ -212,58 +221,127 @@ async def confirm_upload(req: ConfirmUploadRequest):
     }
 
 @router.post("/start-viva")
-async def start_viva():
-    """Generate 6 unique questions and create a new viva session."""
+async def start_viva(req: StartVivaRequest = StartVivaRequest(mode="quick")):
+    """Start a new viva session. Mode determines static vs agent-driven flow."""
     if len(doc_store.chunks) == 0:
         logger.error("[ERROR 400] Expected chunks but doc_store is empty.")
         raise HTTPException(400, "No documents loaded. Please upload PDFs first.")
 
     session_id = str(uuid.uuid4())
-    questions = generate_questions(doc_store, num=6)
-
-    sessions[session_id] = {
-        "questions": questions,
-        "answers": {},  # question_id -> {answer, score, critique, source_chunk_index}
-    }
-
-    logger.info(f"[SUCCESS] Viva Session {session_id} Started.")
-    return {
-        "session_id": session_id,
-        "questions": [{"id": q["id"], "question": q["question"]} for q in questions],
-    }
+    num_questions = req.num_questions if hasattr(req, 'num_questions') and req.num_questions else 6
+    
+    if req.mode == "comprehensive":
+        supervisor = SupervisorAgent(doc_store, max_questions=num_questions)
+        action = supervisor.get_next_action()
+        questions = [action["question"]]
+        
+        sessions[session_id] = {
+            "mode": "comprehensive",
+            "supervisor": supervisor,
+            "current_question": action["question"],
+            "questions": questions, # keep for compat
+            "answers": {},
+        }
+        logger.info(f"[SUCCESS] Comprehensive Viva Session {session_id} Started.")
+        return {
+            "session_id": session_id,
+            "mode": "comprehensive",
+            "questions": [{"id": q["id"], "question": q["question"], "context_label": q.get("context_label", "")} for q in questions],
+        }
+    else:
+        questions = generate_questions(doc_store, num=num_questions)
+        sessions[session_id] = {
+            "mode": "quick",
+            "questions": questions,
+            "answers": {},  
+        }
+        logger.info(f"[SUCCESS] Quick Viva Session {session_id} Started.")
+        return {
+            "session_id": session_id,
+            "mode": "quick",
+            "questions": [{"id": q["id"], "question": q["question"], "context_label": q.get("context_label", "")} for q in questions],
+        }
 
 @router.post("/submit-answer")
 async def submit_answer(req: SubmitAnswerRequest):
-    """Evaluate a user's answer against the source chunk using cosine similarity."""
+    """Evaluate a user's answer. In comprehensive mode, return the next dynamic question."""
     session = sessions.get(req.session_id)
     if not session:
         logger.error(f"[ERROR 404] Session {req.session_id} not found.")
         raise HTTPException(404, "Session not found.")
 
-    question = next((q for q in session["questions"] if q["id"] == req.question_id), None)
-    if not question:
-        logger.error(f"[ERROR 404] Question {req.question_id} not found.")
-        raise HTTPException(404, "Question not found in this session.")
+    if session.get("mode") == "comprehensive":
+        supervisor: SupervisorAgent = session["supervisor"]
+        question = session["current_question"]
+        
+        if question["id"] != req.question_id:
+            raise HTTPException(400, "Question ID mismatch.")
+            
+        result = supervisor.process_answer(req.answer, question)
+        
+        # Save for finalize compat
+        session["answers"][req.question_id] = {
+            "answer": req.answer,
+            "score": result["score"],
+            "critique": result["critique"],
+            "source_chunk_index": question["source_chunk_index"],
+        }
+        
+        next_action = supervisor.get_next_action()
+        
+        if next_action["action"] == "complete":
+            # Just store the map so finalize can access it if needed, or return directly
+            session["knowledge_map"] = next_action["knowledge_map"]
+            return {
+                "question_id": req.question_id,
+                "score": result["score"],
+                "critique": result["critique"],
+                "is_complete": True
+            }
+        else:
+            new_question = next_action["question"]
+            session["current_question"] = new_question
+            session["questions"].append(new_question)
+            return {
+                "question_id": req.question_id,
+                "score": result["score"],
+                "critique": result["critique"],
+                "is_complete": False,
+                "next_question": {
+                    "id": new_question["id"], 
+                    "question": new_question["question"], 
+                    "context_label": new_question.get("context_label", "")
+                }
+            }
+            
+    else:
+        # Quick Mode Legacy Logic
+        question = next((q for q in session["questions"] if q["id"] == req.question_id), None)
+        if not question:
+            logger.error(f"[ERROR 404] Question {req.question_id} not found.")
+            raise HTTPException(404, "Question not found in this session.")
 
-    source_chunk = doc_store.chunks[question["source_chunk_index"]]
-    question_text = question["question"]
-    q_intent = question.get("intent", "")
-    q_topic = question.get("topic", "")
-    
-    result = evaluate_answer(req.answer, question_text, source_chunk, SBERTSingleton(), intent=q_intent, topic=q_topic)
+        source_chunk = question.get("cluster_text", doc_store.chunks[question["source_chunk_index"]])
+        question_text = question["question"]
+        q_intent = question.get("intent", "")
+        q_topic = question.get("topic", "")
+        
+        result = evaluate_answer(req.answer, question_text, source_chunk, SBERTSingleton(), intent=q_intent, topic=q_topic)
 
-    session["answers"][req.question_id] = {
-        "answer": req.answer,
-        "score": result["score"],
-        "critique": result["critique"],
-        "source_chunk_index": question["source_chunk_index"],
-    }
+        session["answers"][req.question_id] = {
+            "answer": req.answer,
+            "score": result["score"],
+            "critique": result["critique"],
+            "source_chunk_index": question["source_chunk_index"],
+            "cluster_indices": question.get("cluster_indices", [question["source_chunk_index"]]),
+        }
 
-    return {
-        "question_id": req.question_id,
-        "score": result["score"],
-        "critique": result["critique"],
-    }
+        return {
+            "question_id": req.question_id,
+            "score": result["score"],
+            "critique": result["critique"],
+            "is_complete": len(session["answers"]) == len(session["questions"])
+        }
 
 @router.post("/finalize")
 async def finalize(req: FinalizeRequest):
@@ -295,7 +373,13 @@ async def finalize(req: FinalizeRequest):
     while len(topic_mastery) < 3:
         topic_mastery.append({"topic": f"Section {len(topic_mastery)+1}", "score": 0})
 
-    answered_map: Dict[int, float] = {a["source_chunk_index"]: a["score"] for a in answers.values()}
+    # Propagate the semantic cluster score to ALL chunks within that cluster!
+    answered_map: Dict[int, float] = {}
+    for a in answers.values():
+        cluster_indices = a.get("cluster_indices", [a["source_chunk_index"]])
+        for idx in cluster_indices:
+            answered_map[idx] = a["score"]
+
     recall_heatmap = []
     for i, chunk in enumerate(doc_store.chunks):
         score = answered_map.get(i, -1)
@@ -315,7 +399,7 @@ async def finalize(req: FinalizeRequest):
         })
 
     weak = [
-        {"question": next(q["question"] for q in session["questions"] if q["id"] == qid),
+        {"question": next((q["question"] for q in session["questions"] if q["id"] == qid), "Unknown question"),
          "score": a["score"],
          "critique": a["critique"]}
         for qid, a in answers.items() if a["score"] < 60
@@ -327,9 +411,53 @@ async def finalize(req: FinalizeRequest):
     else:
         areas_text = "Great job! You demonstrated strong understanding across all tested areas."
 
+    # Build grouped knowledge map for Dashboard.jsx
+    # Dashboard expects: [ { file_name: str, chunks: [ { text: str, score: float | -1 } ] } ]
+    grouped_map = {}
+    
+    # If comprehensive mode, we might have inferred scores from the agent
+    agent_scores = []
+    if session.get("mode") == "comprehensive":
+        agent_map = session.get("knowledge_map", [])
+        # agent_map is a flat list: [{"index": i, "score": s, ...}]
+        agent_scores = [item.get("score") for item in agent_map]
+    
+    for i, chunk_text in enumerate(doc_store.chunks):
+        label = doc_store.chunk_labels[i]
+        file_name = label.split(" — ")[0] if " — " in label else label
+        
+        # Determine score
+        score = -1 # default untested
+        if session.get("mode") == "comprehensive" and agent_scores and i < len(agent_scores):
+            # Use agent's inferred score if available
+            s = agent_scores[i]
+            if s is not None:
+                score = s
+        else:
+            # Quick mode: fully shaded!
+            if i in answered_map:
+                score = answered_map[i]
+                
+        if file_name not in grouped_map:
+            grouped_map[file_name] = []
+            
+        grouped_map[file_name].append({
+            "text": chunk_text,
+            "score": score
+        })
+        
+    final_knowledge_map = [
+        {"file_name": fn, "chunks": chunks} 
+        for fn, chunks in grouped_map.items()
+    ]
+
+    session["final_knowledge_map"] = final_knowledge_map
+    
     logger.info(f"[SUCCESS] Viva Session {req.session_id} Finalized with Overall Score: {overall_score}.")
     
     return {
+        "session_id": req.session_id,
+        "mode": session.get("mode", "quick"),
         "overall_score": overall_score,
         "topic_mastery": topic_mastery,
         "recall_heatmap": recall_heatmap,
@@ -337,4 +465,121 @@ async def finalize(req: FinalizeRequest):
         "total_questions": len(session["questions"]),
         "total_answered": len(answers),
         "individual_scores": scores,
+        "knowledge_map": final_knowledge_map
     }
+
+from fastapi.responses import FileResponse
+import os
+import fitz
+
+@router.get("/download-report/{session_id}")
+async def download_report(session_id: str):
+    """Generate and return an annotated PDF with performance highlights."""
+    session = sessions.get(session_id)
+    if not session or "final_knowledge_map" not in session:
+        raise HTTPException(404, "Session not found or not finalized.")
+
+    final_knowledge_map = session["final_knowledge_map"]
+    
+    # We will generate a single combined PDF if there are multiple documents, or just one.
+    # For simplicity, we annotate the first document uploaded.
+    # In a full implementation we'd merge them, but here we'll return the first one.
+    if not final_knowledge_map:
+        raise HTTPException(400, "No documents mapped.")
+        
+    doc_info = final_knowledge_map[0]
+    file_name = doc_info["file_name"]
+    
+    # Try direct lookup first, then fuzzy match (handles edge cases)
+    pdf_path = doc_store.pdf_paths.get(file_name)
+    if not pdf_path:
+        # Try matching by basename in case the key is stored differently
+        for key, path in doc_store.pdf_paths.items():
+            if key.endswith(file_name) or file_name.endswith(key):
+                pdf_path = path
+                file_name = key
+                break
+
+    if not pdf_path:
+        logger.error(f"[ERROR] PDF not found. file_name={file_name}, known keys={list(doc_store.pdf_paths.keys())}")
+        raise HTTPException(404, f"Original PDF not found on server. Known files: {list(doc_store.pdf_paths.keys())}")
+
+    if not os.path.exists(pdf_path):
+        raise HTTPException(404, f"PDF file was deleted from disk: {pdf_path}")
+        
+    out_pdf_path = os.path.join("temp_uploads", f"annotated_{session_id}_{file_name}")
+    
+    try:
+        pdf_document = fitz.open(pdf_path)
+        
+        # Insert Legend Page at the beginning
+        legend_page = pdf_document.new_page(pno=0, width=595, height=842)
+        
+        # Draw background header
+        legend_page.draw_rect(fitz.Rect(0, 0, 595, 120), color=(0.1, 0.1, 0.15), fill=(0.1, 0.1, 0.15))
+        legend_page.insert_text((50, 70), "Viva Verse: Semantic Mastery Report", fontsize=24, color=(1, 1, 1), fontname="hebo")
+        
+        # Draw introductory text
+        legend_page.insert_text((50, 160), "This document has been AI-annotated based on your Viva performance.", fontsize=12, fontname="helv")
+        legend_page.insert_text((50, 180), "Highlights indicate semantic chunks tested during the session.", fontsize=12, fontname="helv")
+        
+        # Draw Legend entries (distinct colors)
+        legend_page.insert_text((50, 240), "Understanding Levels:", fontsize=16, fontname="hebo")
+        
+        # Green (Strong)
+        legend_page.draw_rect(fitz.Rect(50, 270, 80, 300), color=(0.3, 0.8, 0.5), fill=(0.52, 0.93, 0.67))
+        legend_page.insert_text((100, 290), "Strong Mastery (Score >= 75%)", fontsize=14, fontname="helv")
+        
+        # Yellow (Fair)
+        legend_page.draw_rect(fitz.Rect(50, 320, 80, 350), color=(0.9, 0.7, 0.1), fill=(0.99, 0.88, 0.27))
+        legend_page.insert_text((100, 340), "Fair/Partial Understanding (Score 45% - 74%)", fontsize=14, fontname="helv")
+        
+        # Red (Weak)
+        legend_page.draw_rect(fitz.Rect(50, 370, 80, 400), color=(0.8, 0.3, 0.3), fill=(0.98, 0.65, 0.65))
+        legend_page.insert_text((100, 390), "Weak/Critical Gap (Score < 45%)", fontsize=14, fontname="helv")
+        
+        # Note about missing chunks
+        legend_page.insert_text((50, 450), "* Unhighlighted text means that section was not tested or was filtered out.", fontsize=10, fontname="helv")
+
+        for chunk in doc_info["chunks"]:
+            score = chunk["score"]
+            text = chunk["text"]
+            if score < 0:
+                continue # Untested
+            
+            # Colors in fitz are RGB from 0 to 1
+            if score >= 75:
+                color = (0.52, 0.93, 0.67) # Green
+            elif score >= 45:
+                color = (0.99, 0.88, 0.27) # Yellow
+            else:
+                color = (0.98, 0.65, 0.65) # Red
+                
+            # Break chunk into 5-word phrases and search for each to highlight the entire chunk
+            words = text.split()
+            phrases = []
+            for i in range(0, len(words), 5):
+                phrase = " ".join(words[i:i+5])
+                if len(phrase.strip()) > 3:
+                    phrases.append(phrase)
+            
+            # Start from page 1 since page 0 is our legend
+            for page_idx in range(1, len(pdf_document)):
+                page = pdf_document[page_idx]
+                for phrase in phrases:
+                    text_instances = page.search_for(phrase)
+                    for inst in text_instances:
+                        annot = page.add_highlight_annot(inst)
+                        annot.set_colors(stroke=color)
+                        annot.update()
+                    
+        pdf_document.save(out_pdf_path)
+        pdf_document.close()
+    except Exception as e:
+        import traceback
+        tb = traceback.format_exc()
+        logger.error(f"[ERROR] Failed to generate annotated PDF: {e}\n{tb}")
+        raise HTTPException(500, f"Failed to generate report: {type(e).__name__}: {str(e)}")
+        
+    return FileResponse(out_pdf_path, filename=f"Viva_Report_{file_name}", media_type="application/pdf")
+
