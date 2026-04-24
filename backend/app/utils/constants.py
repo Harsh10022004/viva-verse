@@ -25,49 +25,48 @@ QUESTION_TYPES = [
     {
         "intent": "explain",
         "templates": [
-            "Based on the document, explain in your own words: {topic}. Why is this significant?",
-            "The document discusses {topic}. Can you explain the underlying concepts and their importance?",
-            "Walk me through your understanding of {topic} as presented in the material.",
+            "The document states: '{topic}'. Can you explain the underlying principles behind this in your own words?",
+            "Regarding the excerpt, '{topic}', what exactly does this mean and why is it significant?",
+            "Please elaborate on this statement from the material: '{topic}'.",
         ]
     },
     {
         "intent": "analyze",
         "templates": [
-            "Looking at {topic}, what are the key factors or components involved, and how do they interact?",
-            "Analyze {topic} from the document. What are its causes, effects, or implications?",
-            "What deeper insights can you draw about {topic}? Discuss the reasoning behind it.",
+            "Looking at the concept that '{topic}', what are the key factors involved, and how do they interact?",
+            "Analyze the following point from the text: '{topic}'. What are its causes, effects, or implications?",
+            "What deeper insights can you draw from the statement: '{topic}'? Discuss the reasoning behind it.",
         ]
     },
     {
         "intent": "apply",
         "templates": [
-            "How would you apply the concept of {topic} in a real-world scenario? Give a practical example.",
-            "If you had to use {topic} to solve a problem, how would you approach it?",
-            "What practical implications does {topic} have? How might it be used or implemented?",
+            "How would you apply the principle that '{topic}' in a practical, real-world scenario?",
+            "If you had to solve a problem based on the fact that '{topic}', how would you approach it?",
+            "Consider the statement: '{topic}'. What practical implications does this have?",
         ]
     },
     {
         "intent": "compare",
         "templates": [
-            "How does {topic} relate to or differ from other concepts discussed in the document?",
-            "Compare the different aspects of {topic}. What are the trade-offs or complementary elements?",
-            "In the context of {topic}, what are the main arguments or perspectives presented?",
+            "The text mentions: '{topic}'. How does this relate to or contrast with other concepts you've read in the document?",
+            "In the context of the statement '{topic}', what alternative perspectives or trade-offs could be considered?",
         ]
     },
     {
         "intent": "evaluate",
         "templates": [
-            "Critically evaluate {topic}. What are its strengths and potential limitations?",
-            "Why is {topic} considered important in this context? What would change without it?",
-            "Assess the role of {topic}. Do you think the approach described is effective? Why?",
+            "Critically evaluate the following point from the text: '{topic}'. What are its strengths and potential limitations?",
+            "Why is it considered important that '{topic}'? What would change if this were not the case?",
+            "Assess the validity and role of this claim: '{topic}'. Do you agree with the approach described?",
         ]
     },
     {
         "intent": "synthesize",
         "templates": [
-            "Summarize the key ideas around {topic} and explain how they connect to the broader themes in the document.",
-            "Pull together the various points about {topic}. What is the overall message or conclusion?",
-            "How does {topic} fit into the bigger picture presented in the document? Connect the dots.",
+            "Summarize the key ideas surrounding the statement '{topic}' and explain how they connect to the broader themes.",
+            "Pull together the various points related to '{topic}'. What is the overall message or conclusion?",
+            "How does the concept that '{topic}' fit into the bigger picture presented in the document? Connect the dots.",
         ]
     },
 ]
