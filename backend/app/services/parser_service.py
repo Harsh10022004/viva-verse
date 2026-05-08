@@ -21,6 +21,7 @@ class DocumentStore:
         self.chunks: List[str] = []
         self.chunk_labels: List[str] = []
         self.embeddings: Optional[np.ndarray] = None
+        self.pdf_paths: Dict[str, str] = {}
         self.model = SBERTSingleton()
 
     def add_chunks(self, chunks: List[str], labels: List[str]):
@@ -59,11 +60,25 @@ def chunk_text(pages: List[Dict], max_words: int = 200) -> tuple[List[str], List
     """Split page texts into semantic chunks of ~max_words words."""
     chunks: List[str] = []
     labels: List[str] = []
+    
+    # Simple heuristics to identify noisy pages
+    noisy_patterns = [
+        r"(?i)\b(table of contents|contents|index|acknowledgement)\b",
+        r"(?i)^([0-9]+\s*\.*){3,}" # ToC dot leaders
+    ]
+    
     for p in pages:
-        words = p["text"].split()
+        text = p["text"]
+        
+        # Check if page is mostly ToC or Acknowledgements
+        if any(re.search(pat, text[:500]) for pat in noisy_patterns) and len(text.split()) < 300:
+            continue # Skip this page
+            
+        words = text.split()
         for start in range(0, len(words), max_words):
             chunk = " ".join(words[start : start + max_words])
-            if len(chunk.split()) > 15:           # ignore tiny fragments
+            # Extra noise filtering on chunk level: drop if it's too small or seems like an index
+            if len(chunk.split()) > 20: 
                 chunks.append(chunk)
                 labels.append(f"Page {p['page']}")
     return chunks, labels
@@ -122,87 +137,104 @@ def _extract_topic_phrases(chunk: str) -> List[str]:
     return unique_phrases[:10]
 
 
-def _select_diverse_chunks(store: "DocumentStore", num: int = 6) -> List[int]:
+def _cluster_semantic_chunks(store: "DocumentStore", num: int = 6) -> List[Dict]:
+    """
+    Groups chunks into `num` semantic clusters using K-Means on their embeddings.
+    Returns a list of dicts: {"indices": [int], "best_idx": int}
+    """
+    from sklearn.cluster import KMeans
+    
     total = len(store.chunks)
     if total <= num:
-        return list(range(total))
+        return [{"indices": [i], "best_idx": i} for i in range(total)]
 
     embeddings = store.embeddings
-    mean_emb = np.mean(embeddings, axis=0, keepdims=True)
-    dist_from_mean = 1 - cosine_similarity(embeddings, mean_emb).flatten()
-
+    
+    # Run K-Means clustering
+    kmeans = KMeans(n_clusters=num, random_state=42, n_init=10)
+    labels = kmeans.fit_predict(embeddings)
+    
+    # Calculate richness to find the "best" representative chunk per cluster
     richness_scores = []
     for chunk in store.chunks:
         words = re.findall(r'[A-Za-z]+', chunk.lower())
         meaningful = [w for w in words if w not in STOPWORDS and len(w) > 3]
         unique_ratio = len(set(meaningful)) / max(len(meaningful), 1)
         richness_scores.append(len(meaningful) * unique_ratio)
+    
     richness = np.array(richness_scores)
     richness = richness / max(richness.max(), 1)  # normalize
 
-    importance = dist_from_mean * 0.4 + richness * 0.6
+    clusters = []
+    for i in range(num):
+        indices = np.where(labels == i)[0].tolist()
+        if not indices:
+            continue
+            
+        # Find the most semantically rich chunks in this cluster
+        cluster_richness = richness[indices]
+        sorted_local = np.argsort(cluster_richness)[::-1]
+        best_local = int(sorted_local[0])
+        best_idx = indices[best_local]
+        
+        # Take the top 3 most information-dense chunks
+        top_3_indices = [indices[idx] for idx in sorted_local[:3]]
+        
+        clusters.append({
+            "cluster_id": i,
+            "indices": indices, # All indices for final shading
+            "best_idx": best_idx,
+            "top_3_indices": top_3_indices # Subset for LLM context
+        })
 
-    selected = [int(np.argmax(importance))]
-    for _ in range(num - 1):
-        remaining = [i for i in range(total) if i not in selected]
-        if not remaining:
-            break
-        best_idx = -1
-        best_score = -1
-        for i in remaining:
-            sims_to_selected = cosine_similarity(
-                [embeddings[i]], [embeddings[j] for j in selected]
-            )[0]
-            min_sim = float(np.max(sims_to_selected))
-            diversity_score = (1 - min_sim) * 0.6 + importance[i] * 0.4
-            if diversity_score > best_score:
-                best_score = diversity_score
-                best_idx = i
-        if best_idx >= 0:
-            selected.append(best_idx)
-
-    selected.sort()
-    return selected
+    return clusters
 
 
 def generate_questions(store: "DocumentStore", num: int = 6) -> List[Dict]:
-    logger.info(f"[INFO] Generating {num} questions from document chunks.")
+    logger.info(f"[INFO] Generating {num} questions from semantic clusters.")
     if len(store.chunks) == 0:
         logger.warning("[WARNING] No chunks in DocumentStore.")
         return []
 
-    selected_indices = _select_diverse_chunks(store, num)
+    clusters = _cluster_semantic_chunks(store, num)
+
+    from app.services.llm_service import GeminiQGSingleton
+    qg_model = GeminiQGSingleton()
+
+    # Collect all cluster contexts for batch generation
+    cluster_contexts = []
+    for cluster in clusters:
+        top_3_indices = cluster["top_3_indices"]
+        cluster_text_parts = [store.chunks[idx] for idx in top_3_indices]
+        full_cluster_text = " ".join(cluster_text_parts)
+        words = full_cluster_text.split()
+        if len(words) > 1000:
+            full_cluster_text = " ".join(words[:1000])
+        cluster_contexts.append(full_cluster_text)
+
+    # Make ONE single API call to generate all questions
+    logger.info("[INFO] Sending batch request to Gemini...")
+    generated_questions = qg_model.generate_questions_batch(cluster_contexts)
 
     questions = []
-    used_intents = set()
-
-    for idx in selected_indices[:num]:
-        chunk = store.chunks[idx]
-
-        topic_phrases = _extract_topic_phrases(chunk)
-        core_sentence = _summarize_chunk_topic(chunk)
-
-        if topic_phrases:
-            topic = topic_phrases[0]
-        else:
-            topic = ' '.join(core_sentence.split()[:8])
-
-        available_intents = [i for i in range(len(QUESTION_TYPES)) if i not in used_intents]
-        if not available_intents:
-            available_intents = list(range(len(QUESTION_TYPES)))
-        intent_idx = random.choice(available_intents)
-        used_intents.add(intent_idx)
-
-        q_type = QUESTION_TYPES[intent_idx]
-        template = random.choice(q_type["templates"])
-        question_text = template.format(topic=topic)
+    for i, cluster in enumerate(clusters):
+        indices = cluster["indices"]
+        best_idx = cluster["best_idx"]
+        
+        chunk_label = store.chunk_labels[best_idx]
+        topic = _summarize_chunk_topic(store.chunks[best_idx]).strip('.,;:!?')
+        
+        question_text = generated_questions[i] if i < len(generated_questions) else "Could you explain this topic?"
 
         questions.append({
             "id": str(uuid.uuid4()),
             "question": question_text,
-            "source_chunk_index": idx,
-            "intent": q_type["intent"],
+            "source_chunk_index": best_idx, # fallback backward compat
+            "cluster_indices": indices, # ALL chunks in this cluster for highlighting
+            "cluster_text": cluster_contexts[i], # The context block
+            "intent": "conceptual",
             "topic": topic,
+            "context_label": chunk_label,
         })
 
     logger.info(f"[SUCCESS] Questions Generated ({len(questions)} items).")
