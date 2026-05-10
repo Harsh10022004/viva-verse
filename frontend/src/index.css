@@ -1,157 +1,122 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-/* ── Global Styles ── */
-* {
-  margin: 0;
-  padding: 0;
-  box-sizing: border-box;
+@layer base {
+  :root {
+    --surface-900: #0a0a0b;
+    --surface-800: #121214;
+    --surface-700: #27272a;
+    --surface-600: #3f3f46;
+    --surface-500: #52525b;
+    
+    --brand-400: #818cf8;
+    --brand-500: #6366f1;
+    --brand-600: #4f46e5;
+  }
+
+  body {
+    font-family: 'Inter', system-ui, sans-serif;
+    color: #f4f4f5;
+    background-color: var(--surface-900);
+    /* Classy animated glowing mesh background */
+    background-image: 
+      radial-gradient(at 0% 0%, hsla(253,16%,7%,1) 0, transparent 50%), 
+      radial-gradient(at 50% 0%, hsla(225,39%,30%,0.15) 0, transparent 50%), 
+      radial-gradient(at 100% 0%, hsla(339,49%,30%,0.15) 0, transparent 50%);
+    background-attachment: fixed;
+    background-repeat: no-repeat;
+    background-size: cover;
+    -webkit-font-smoothing: antialiased;
+    min-height: 100vh;
+  }
 }
 
-body {
-  background: #0a0e1a;
-  min-height: 100vh;
-  overflow-x: hidden;
+@layer components {
+  .btn-primary {
+    @apply relative overflow-hidden bg-brand-500 text-white font-semibold py-3 px-8 rounded-xl transition-all duration-300 shadow-[0_0_20px_rgba(99,102,241,0.3)];
+  }
+  .btn-primary:hover {
+    @apply shadow-[0_0_30px_rgba(99,102,241,0.5)] -translate-y-0.5 bg-brand-400;
+  }
+  .btn-glow {
+    @apply relative overflow-hidden bg-brand-600 text-white font-medium transition-all duration-300 rounded-lg;
+  }
+  .btn-glow:hover {
+    @apply bg-brand-500 shadow-lg shadow-brand-500/25;
+  }
+  .glass-panel {
+    @apply bg-surface-800/60 backdrop-blur-xl border border-white/5 shadow-2xl;
+  }
+  .gradient-text {
+    @apply text-transparent bg-clip-text bg-gradient-to-r from-brand-400 via-purple-400 to-pink-400;
+  }
 }
 
-/* ── Scrollbar ── */
-::-webkit-scrollbar {
-  width: 6px;
-}
-::-webkit-scrollbar-track {
-  background: #111827;
-}
-::-webkit-scrollbar-thumb {
-  background: #4c6ef5;
-  border-radius: 3px;
-}
-
-/* ── Glassmorphism Card ── */
-.glass {
-  background: rgba(26, 32, 53, 0.6);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-  border: 1px solid rgba(92, 124, 250, 0.15);
-}
-
-/* ── Gradient Text ── */
-.gradient-text {
-  background: linear-gradient(135deg, #748ffc, #5c7cfa, #9775fa, #da77f2);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
-}
-
-/* ── Glow Button ── */
-.btn-glow {
-  position: relative;
-  background: linear-gradient(135deg, #4c6ef5, #5c7cfa);
-  transition: all 0.3s ease;
-  overflow: hidden;
-}
-.btn-glow::before {
-  content: '';
-  position: absolute;
-  top: -2px; left: -2px; right: -2px; bottom: -2px;
-  background: linear-gradient(135deg, #4c6ef5, #9775fa, #da77f2, #4c6ef5);
-  border-radius: inherit;
-  z-index: -1;
-  filter: blur(8px);
-  opacity: 0;
-  transition: opacity 0.3s ease;
-}
-.btn-glow:hover::before {
-  opacity: 1;
-}
-.btn-glow:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 8px 30px rgba(76, 110, 245, 0.4);
-}
-
-/* ── Terminal Cursor Blink ── */
-@keyframes blink {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0; }
-}
-.cursor-blink {
-  animation: blink 1s infinite;
-}
-
-/* ── Fade In Up ── */
+/* Animations */
 @keyframes fadeInUp {
-  from {
-    opacity: 0;
-    transform: translateY(30px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
+  from { opacity: 0; transform: translateY(15px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 .fade-in-up {
-  animation: fadeInUp 0.6s ease-out forwards;
+  animation: fadeInUp 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
-/* ── Score Pop ── */
-@keyframes scorePop {
-  0% { transform: scale(0); opacity: 0; }
-  60% { transform: scale(1.2); }
-  100% { transform: scale(1); opacity: 1; }
-}
-.score-pop {
-  animation: scorePop 0.5s ease-out forwards;
-}
-
-/* ── Typing effect ── */
-@keyframes typing {
-  from { width: 0; }
-  to { width: 100%; }
-}
-
-/* ── Particle background ── */
-.bg-particles {
-  position: fixed;
-  inset: 0;
-  z-index: 0;
-  background:
-    radial-gradient(ellipse at 20% 50%, rgba(76, 110, 245, 0.08) 0%, transparent 50%),
-    radial-gradient(ellipse at 80% 20%, rgba(151, 117, 250, 0.06) 0%, transparent 50%),
-    radial-gradient(ellipse at 50% 80%, rgba(218, 119, 242, 0.04) 0%, transparent 50%);
-  pointer-events: none;
+/* Document Render */
+.document-render {
+  font-family: 'Times New Roman', Times, serif;
+  line-height: 1.6;
+  color: #111827; /* Dark gray, near black text for reading */
+  font-size: 14px;
+  background-color: #ffffff;
+  border-radius: 4px;
+  padding: 3rem 4rem; /* mimicking page margins */
+  margin: 1rem auto;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.5), 0 2px 4px -1px rgba(0, 0, 0, 0.3);
+  max-width: 800px;
+  aspect-ratio: 1 / 1.414; /* A4 aspect ratio approximation */
+  overflow-y: auto;
 }
 
-/* ── Drop zone ── */
-.drop-zone {
-  border: 2px dashed rgba(92, 124, 250, 0.3);
+/* Scrollbar for document to keep it neat */
+.document-render::-webkit-scrollbar {
+  width: 6px;
+}
+.document-render::-webkit-scrollbar-track {
+  background: transparent;
+}
+.document-render::-webkit-scrollbar-thumb {
+  background-color: #d1d5db;
+  border-radius: 10px;
+}
+
+.text-chunk {
   transition: all 0.3s ease;
+  border-radius: 3px;
+  padding: 1px 3px;
+  margin: 0 1px;
 }
-.drop-zone:hover,
-.drop-zone.drag-over {
-  border-color: #5c7cfa;
-  background: rgba(92, 124, 250, 0.05);
-  box-shadow: 0 0 30px rgba(92, 124, 250, 0.1);
-}
-
-/* ── Heatmap cell ── */
-.heatmap-cell {
-  transition: all 0.3s ease;
-  border-radius: 6px;
-}
-.heatmap-cell:hover {
-  transform: scale(1.15);
-  z-index: 10;
+.text-chunk:hover {
+  filter: brightness(0.9);
+  cursor: help;
 }
 
-/* ── Loading spinner ── */
-@keyframes spin-slow {
-  to { transform: rotate(360deg); }
+/* Highlighter styles mimicking marker pens over paper */
+.text-chunk-strong {
+  background-color: rgba(134, 239, 172, 0.4); /* green highlighter */
+  border-bottom: 2px solid #22c55e;
 }
-.loader-ring {
-  width: 48px;
-  height: 48px;
-  border: 3px solid rgba(92, 124, 250, 0.2);
-  border-top-color: #5c7cfa;
-  border-radius: 50%;
-  animation: spin-slow 1s linear infinite;
+.text-chunk-fair {
+  background-color: rgba(253, 224, 71, 0.4); /* yellow highlighter */
+  border-bottom: 2px solid #eab308;
+}
+.text-chunk-weak {
+  background-color: rgba(252, 165, 165, 0.4); /* red highlighter */
+  border-bottom: 2px solid #ef4444;
+}
+.text-chunk-untested {
+  background-color: transparent;
+  color: #374151;
 }

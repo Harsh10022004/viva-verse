@@ -48,15 +48,15 @@ function App() {
             <div className="bg-particles" />
 
             {/* Header */}
-            <header className="relative z-10 border-b border-surface-600/50 backdrop-blur-md bg-surface-900/50">
+            <header className="relative z-10 border-b border-surface-800 bg-black/50 backdrop-blur-md">
                 <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
                     <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-brand-500 to-purple-500 flex items-center justify-center text-white font-bold text-lg shadow-lg shadow-brand-500/30">
+                        <div className="w-8 h-8 rounded-lg bg-surface-800 border border-surface-700 flex items-center justify-center text-gray-100 font-bold text-sm">
                             V
                         </div>
                         <div>
-                            <h1 className="text-xl font-bold gradient-text">The Viva Verse</h1>
-                            <p className="text-xs text-gray-500 font-mono">AI-Powered Semantic Examination</p>
+                            <h1 className="text-base font-semibold text-gray-100">The Viva Verse</h1>
+                            <p className="text-[10px] text-gray-500 uppercase tracking-widest font-medium">Semantic Examination</p>
                         </div>
                     </div>
 
@@ -68,19 +68,19 @@ function App() {
                             const isDone = ['upload', 'viva', 'dashboard'].indexOf(view) > i
                             return (
                                 <div key={step} className="flex items-center gap-2">
-                                    {i > 0 && <div className={`w-8 h-px ${isDone ? 'bg-brand-500' : 'bg-surface-600'}`} />}
-                                    <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all duration-300 ${isActive
-                                        ? 'bg-brand-500/20 text-brand-400 border border-brand-500/30'
+                                    {i > 0 && <div className={`w-6 h-px ${isDone ? 'bg-gray-400' : 'bg-surface-800'}`} />}
+                                    <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-[11px] font-semibold transition-all duration-300 ${isActive
+                                        ? 'bg-surface-800 text-gray-100 border border-surface-600'
                                         : isDone
-                                            ? 'bg-green-500/20 text-green-400 border border-green-500/30'
-                                            : 'bg-surface-700 text-gray-500 border border-surface-600'
+                                            ? 'text-gray-400'
+                                            : 'text-gray-600'
                                         }`}>
                                         {isDone ? (
                                             <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20">
                                                 <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
                                             </svg>
                                         ) : (
-                                            <span className={`w-1.5 h-1.5 rounded-full ${isActive ? 'bg-brand-400' : 'bg-gray-600'}`} />
+                                            <span className={`w-1.5 h-1.5 rounded-full ${isActive ? 'bg-gray-300' : 'bg-surface-700'}`} />
                                         )}
                                         {step}
                                     </div>
