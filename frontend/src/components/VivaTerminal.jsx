@@ -1,5 +1,8 @@
-import { useState } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import axios from 'axios'
+
+const SpeechRecognition = typeof window !== 'undefined' && (window.SpeechRecognition || window.webkitSpeechRecognition)
+const voiceSupported = !!SpeechRecognition
 
 export default function VivaTerminal({ apiBase, sessionId, questions: initialQuestions, onComplete, addToast }) {
     const [localQuestions, setLocalQuestions] = useState(initialQuestions)
@@ -10,6 +13,65 @@ export default function VivaTerminal({ apiBase, sessionId, questions: initialQue
     const [history, setHistory] = useState([]) 
     const [finalizing, setFinalizing] = useState(false)
     const [isComplete, setIsComplete] = useState(false)
+    const [isListening, setIsListening] = useState(false)
+    const recognitionRef = useRef(null)
+    const baseAnswerRef = useRef('')
+    const userStoppedRef = useRef(false)
+
+    const toggleVoice = () => {
+        if (!voiceSupported) {
+            addToast('Voice input not supported in this browser. Try Chrome or Edge.', 'warning')
+            return
+        }
+        if (isListening) {
+            userStoppedRef.current = true
+            recognitionRef.current?.stop()
+            return
+        }
+        userStoppedRef.current = false
+        baseAnswerRef.current = answer ? answer.trim() + ' ' : ''
+        startRecognition()
+        setIsListening(true)
+    }
+
+    const startRecognition = () => {
+        const rec = new SpeechRecognition()
+        rec.continuous = false
+        rec.interimResults = true
+        rec.maxAlternatives = 1
+        rec.lang = 'en-US'
+
+        rec.onresult = (event) => {
+            let interim = '', finalText = ''
+            for (let i = event.resultIndex; i < event.results.length; i++) {
+                const t = event.results[i][0].transcript
+                if (event.results[i].isFinal) finalText += t
+                else interim += t
+            }
+            if (finalText) baseAnswerRef.current += finalText + ' '
+            setAnswer(baseAnswerRef.current + interim)
+        }
+        rec.onerror = (e) => {
+            if (e.error === 'no-speech' || e.error === 'aborted') return
+            addToast(`Mic error: ${e.error}`, 'error')
+            userStoppedRef.current = true
+        }
+        rec.onend = () => {
+            if (userStoppedRef.current) {
+                setIsListening(false)
+            } else {
+                setTimeout(() => {
+                    if (userStoppedRef.current) return
+                    try { startRecognition() } catch { setIsListening(false) }
+                }, 250)
+            }
+        }
+        recognitionRef.current = rec
+        try { rec.start() } catch { /* ignore double-start */ }
+    }
+
+    useEffect(() => () => { userStoppedRef.current = true; recognitionRef.current?.stop() }, [])
+    useEffect(() => { if (isListening) { userStoppedRef.current = true; recognitionRef.current?.stop() } }, [currentIdx])
 
     const current = localQuestions[currentIdx]
     const isLast = isComplete || (currentIdx === localQuestions.length - 1 && !feedback?.next_question)
@@ -184,13 +246,33 @@ export default function VivaTerminal({ apiBase, sessionId, questions: initialQue
                                             <kbd className="font-sans px-1.5 py-0.5 bg-surface-800 rounded border border-surface-700 mr-1">⌘</kbd>
                                             <kbd className="font-sans px-1.5 py-0.5 bg-surface-800 rounded border border-surface-700">Enter</kbd> to submit
                                         </div>
-                                        <button
-                                            onClick={handleSubmit}
-                                            disabled={submitting}
-                                            className="btn-glow px-5 py-2 rounded-lg text-sm font-medium disabled:opacity-50"
-                                        >
-                                            {submitting ? 'Evaluating...' : 'Submit'}
-                                        </button>
+                                        <div className="flex items-center">
+                                            {voiceSupported && (
+                                                <button
+                                                    onClick={toggleVoice}
+                                                    disabled={submitting}
+                                                    title={isListening ? 'Stop recording' : 'Start voice input'}
+                                                    className={`p-2 rounded-lg border transition-all mr-2 ${
+                                                        isListening
+                                                            ? 'bg-red-500/20 border-red-500/50 text-red-400 animate-pulse'
+                                                            : 'bg-surface-800 border-surface-700 text-gray-400 hover:text-brand-400 hover:border-brand-500/50'
+                                                    }`}
+                                                >
+                                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                                        <rect x="9" y="2" width="6" height="12" rx="3"/>
+                                                        <path d="M5 10v2a7 7 0 0 0 14 0v-2"/>
+                                                        <line x1="12" y1="19" x2="12" y2="22"/>
+                                                    </svg>
+                                                </button>
+                                            )}
+                                            <button
+                                                onClick={handleSubmit}
+                                                disabled={submitting}
+                                                className="btn-glow px-5 py-2 rounded-lg text-sm font-medium disabled:opacity-50"
+                                            >
+                                                {submitting ? 'Evaluating...' : 'Submit'}
+                                            </button>
+                                        </div>
                                     </div>
                                 </div>
                             </div>
