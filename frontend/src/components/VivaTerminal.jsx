@@ -1,17 +1,20 @@
 import { useState } from 'react'
 import axios from 'axios'
 
-export default function VivaTerminal({ apiBase, sessionId, questions, onComplete, addToast }) {
+export default function VivaTerminal({ apiBase, sessionId, questions: initialQuestions, onComplete, addToast }) {
+    const [localQuestions, setLocalQuestions] = useState(initialQuestions)
     const [currentIdx, setCurrentIdx] = useState(0)
     const [answer, setAnswer] = useState('')
     const [submitting, setSubmitting] = useState(false)
     const [feedback, setFeedback] = useState(null)
-    const [history, setHistory] = useState([]) // array of {question, answer, score, critique}
+    const [history, setHistory] = useState([]) 
     const [finalizing, setFinalizing] = useState(false)
+    const [isComplete, setIsComplete] = useState(false)
 
-    const current = questions[currentIdx]
-    const isLast = currentIdx === questions.length - 1
-    const progress = ((currentIdx + (feedback ? 1 : 0)) / questions.length) * 100
+    const current = localQuestions[currentIdx]
+    const isLast = isComplete || (currentIdx === localQuestions.length - 1 && !feedback?.next_question)
+
+    const progress = ((currentIdx + (feedback ? 1 : 0)) / (localQuestions.length + (feedback?.next_question ? 1 : 0))) * 100
 
     const handleSubmit = async () => {
         if (submitting) return
@@ -38,7 +41,15 @@ export default function VivaTerminal({ apiBase, sessionId, questions, onComplete
                 score: fb.score,
                 critique: fb.critique,
             }])
-            addToast(`Answer submitted! Score: ${fb.score}%`, 'success')
+            addToast(`Answer evaluated! Score: ${fb.score}%`, 'success')
+
+            if (fb.next_question) {
+                setLocalQuestions(prev => [...prev, fb.next_question])
+            }
+            if (fb.is_complete) {
+                setIsComplete(true)
+            }
+
         } catch (err) {
             const errorMsg = err.response?.data?.detail || err.message
             setFeedback({ score: 0, critique: `Error: ${errorMsg}` })
@@ -49,12 +60,11 @@ export default function VivaTerminal({ apiBase, sessionId, questions, onComplete
     }
 
     const handleNext = async () => {
-        if (isLast) {
-            // Finalize
+        if (isLast || isComplete) {
             setFinalizing(true)
             try {
                 const res = await axios.post(`${apiBase}/finalize`, { session_id: sessionId })
-                addToast('Viva finalized. Generating your dashboard!', 'success')
+                addToast('Viva finalized. Generating your 3D Dashboard!', 'success')
                 onComplete(res.data)
             } catch (err) {
                 console.error('Finalize error:', err)
@@ -70,89 +80,97 @@ export default function VivaTerminal({ apiBase, sessionId, questions, onComplete
     }
 
     const getScoreColor = (score) => {
-        if (score >= 70) return 'text-green-400'
-        if (score >= 40) return 'text-yellow-400'
+        if (score >= 75) return 'text-green-400'
+        if (score >= 45) return 'text-yellow-400'
         return 'text-red-400'
     }
 
     const getScoreBg = (score) => {
-        if (score >= 70) return 'bg-green-500/10 border-green-500/30'
-        if (score >= 40) return 'bg-yellow-500/10 border-yellow-500/30'
-        return 'bg-red-500/10 border-red-500/30'
+        if (score >= 75) return 'bg-green-500/10 border-green-500/30 shadow-[0_0_20px_rgba(34,197,94,0.15)]'
+        if (score >= 45) return 'bg-yellow-500/10 border-yellow-500/30 shadow-[0_0_20px_rgba(234,179,8,0.15)]'
+        return 'bg-red-500/10 border-red-500/30 shadow-[0_0_20px_rgba(239,68,68,0.15)]'
     }
 
     return (
-        <div className="max-w-4xl mx-auto px-6 py-10 fade-in-up">
+        <div className="max-w-3xl mx-auto px-4 py-8 fade-in-up">
             {/* Terminal Header */}
-            <div className="glass rounded-2xl overflow-hidden">
+            <div className="bg-surface-900 border border-surface-700 rounded-2xl overflow-hidden shadow-2xl">
                 {/* Title Bar */}
-                <div className="flex items-center gap-2 px-5 py-3 bg-surface-800/80 border-b border-surface-600/50">
-                    <div className="flex gap-1.5">
-                        <div className="w-3 h-3 rounded-full bg-red-500/80" />
-                        <div className="w-3 h-3 rounded-full bg-yellow-500/80" />
-                        <div className="w-3 h-3 rounded-full bg-green-500/80" />
+                <div className="flex items-center justify-between px-5 py-3 bg-surface-800/50 border-b border-surface-700">
+                    <div className="flex items-center gap-2">
+                        <div className="w-2.5 h-2.5 rounded-full bg-surface-600" />
+                        <div className="w-2.5 h-2.5 rounded-full bg-surface-600" />
+                        <div className="w-2.5 h-2.5 rounded-full bg-surface-600" />
                     </div>
-                    <div className="flex-1 text-center">
-                        <span className="text-xs font-mono text-gray-500">
-                            viva-session://{sessionId?.slice(0, 8)}
-                        </span>
+                    <div className="text-xs font-medium text-gray-400">
+                        Session {sessionId?.slice(0, 6)}
                     </div>
-                    <span className="text-xs font-mono text-gray-600">
-                        Q {currentIdx + 1}/{questions.length}
-                    </span>
+                    <div className="text-xs font-semibold text-gray-500 bg-surface-800 px-2 py-0.5 rounded border border-surface-700">
+                        Question {currentIdx + 1} of {localQuestions.length}
+                    </div>
                 </div>
 
                 {/* Progress Bar */}
-                <div className="h-0.5 bg-surface-700">
+                <div className="h-0.5 bg-surface-800">
                     <div
-                        className="h-full bg-gradient-to-r from-brand-500 to-purple-500 transition-all duration-500 ease-out"
-                        style={{ width: `${progress}%` }}
+                        className="h-full bg-brand-500 transition-all duration-500 ease-out"
+                        style={{ width: `${Math.min(100, progress)}%` }}
                     />
                 </div>
 
                 {/* Terminal Content */}
-                <div className="p-6 font-mono text-sm">
+                <div className="p-6 sm:p-8 bg-surface-900">
+                    
                     {/* Past interactions (collapsed) */}
                     {history.length > 0 && (
-                        <div className="mb-6 space-y-3 max-h-48 overflow-y-auto pr-2">
+                        <div className="mb-8 space-y-4 max-h-48 overflow-y-auto pr-3 scrollbar-thin">
                             {history.map((h, i) => (
-                                <div key={i} className="opacity-50">
-                                    <p className="text-brand-400">
-                                        <span className="text-gray-600">[Q{i + 1}]</span> {h.question}
+                                <div key={i} className="opacity-60 hover:opacity-100 transition-opacity bg-surface-800/50 p-4 rounded-xl border border-surface-700/50">
+                                    <p className="text-brand-300 font-bold mb-1">
+                                        <span className="text-brand-500/50">[{i + 1}]</span> {h.question}
                                     </p>
-                                    <p className="text-gray-400 pl-4">→ {h.answer.slice(0, 80)}...</p>
-                                    <p className={`pl-4 ${getScoreColor(h.score)}`}>
-                                        ✓ Score: {h.score}%
-                                    </p>
+                                    <p className="text-gray-400 pl-6 mb-2">→ {h.answer.slice(0, 100)}{h.answer.length > 100 ? '...' : ''}</p>
+                                    <div className={`pl-6 font-bold ${getScoreColor(h.score)} flex items-center gap-2`}>
+                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                                        EVAL SCORE: {h.score}%
+                                    </div>
                                 </div>
                             ))}
-                            <div className="border-t border-surface-600/30 mt-3" />
                         </div>
                     )}
 
                     {/* Current Question */}
-                    <div className="mb-6">
-                        <div className="flex items-start gap-3">
-                            <span className="text-brand-400 font-bold mt-0.5">❯</span>
-                            <div>
-                                <p className="text-gray-500 text-xs mb-1">SYSTEM-LEAD — Question {currentIdx + 1} of {questions.length}</p>
-                                <p className="text-gray-200 leading-relaxed text-base font-sans">
-                                    {current.question}
+                    <div className="mb-8 slide-in-right">
+                        <div className="flex items-start gap-4">
+                            <div className="w-8 h-8 rounded-lg bg-surface-800 border border-surface-700 flex items-center justify-center flex-shrink-0 text-brand-400">
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" /></svg>
+                            </div>
+                            <div className="flex-1 pt-1">
+                                <p className="text-gray-100 text-[15px] leading-relaxed">
+                                    {current?.question}
                                 </p>
+                                {current?.context_label && (
+                                    <div className="mt-3 inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[11px] font-medium text-gray-500 bg-surface-800 border border-surface-700">
+                                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                                        Context: {current.context_label}
+                                    </div>
+                                )}
                             </div>
                         </div>
                     </div>
 
                     {/* Answer Input or Feedback */}
                     {!feedback ? (
-                        <div className="mt-4">
-                            <div className="flex items-start gap-3">
-                                <span className="text-green-400 font-bold mt-3">$</span>
+                        <div className="mt-6 slide-in-right" style={{ animationDelay: '0.1s' }}>
+                            <div className="flex items-start gap-4">
+                                <div className="w-8 h-8 rounded-full bg-surface-800 border border-surface-700 flex items-center justify-center flex-shrink-0 text-gray-400 text-xs font-semibold">
+                                    You
+                                </div>
                                 <div className="flex-1">
                                     <textarea
-                                        className="w-full bg-surface-800/60 border border-surface-600/50 rounded-xl px-4 py-3 text-gray-200 font-sans text-sm
-                      focus:outline-none focus:border-brand-500/50 focus:ring-1 focus:ring-brand-500/20
-                      resize-none transition-all placeholder:text-gray-600"
+                                        className="w-full bg-surface-900 border border-surface-700 rounded-xl px-4 py-3 text-[15px] text-gray-100 
+                                            focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/50
+                                            resize-none transition-all placeholder:text-gray-600"
                                         rows={4}
                                         placeholder="Type your answer here..."
                                         value={answer}
@@ -162,55 +180,44 @@ export default function VivaTerminal({ apiBase, sessionId, questions, onComplete
                                         autoFocus
                                     />
                                     <div className="flex items-center justify-between mt-3">
-                                        <p className="text-gray-600 text-xs">Press Ctrl+Enter to submit</p>
+                                        <div className="text-gray-500 text-xs">
+                                            <kbd className="font-sans px-1.5 py-0.5 bg-surface-800 rounded border border-surface-700 mr-1">⌘</kbd>
+                                            <kbd className="font-sans px-1.5 py-0.5 bg-surface-800 rounded border border-surface-700">Enter</kbd> to submit
+                                        </div>
                                         <button
                                             onClick={handleSubmit}
                                             disabled={submitting}
-                                            className="btn-glow px-6 py-2 rounded-lg text-white text-xs font-semibold disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:transform-none"
+                                            className="btn-glow px-5 py-2 rounded-lg text-sm font-medium disabled:opacity-50"
                                         >
-                                            {submitting ? (
-                                                <span className="flex items-center gap-2">
-                                                    <div className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                                                    Evaluating...
-                                                </span>
-                                            ) : (
-                                                <span className="relative z-10">Submit Answer</span>
-                                            )}
+                                            {submitting ? 'Evaluating...' : 'Submit'}
                                         </button>
                                     </div>
                                 </div>
                             </div>
                         </div>
                     ) : (
-                        <div className="mt-4 fade-in-up">
-                            {/* Score Card */}
-                            <div className={`rounded-xl border p-5 ${getScoreBg(feedback.score)}`}>
-                                <div className="flex items-center gap-4 mb-3">
-                                    <div className={`text-4xl font-extrabold score-pop ${getScoreColor(feedback.score)}`}>
-                                        {feedback.score}%
+                        <div className="mt-8 slide-in-right border-t border-surface-800 pt-6">
+                            {/* Minimal Score Card */}
+                            <div className="flex items-start gap-6 mb-6">
+                                <div className="text-center shrink-0">
+                                    <div className={`text-4xl font-bold tracking-tight ${getScoreColor(feedback.score)}`}>
+                                        {feedback.score}<span className="text-xl text-gray-500">%</span>
                                     </div>
-                                    <div className="h-10 w-px bg-surface-600" />
-                                    <div>
-                                        <p className="text-gray-400 text-xs uppercase tracking-wider mb-1">Semantic Similarity</p>
-                                        <p className="text-sm text-gray-300 leading-relaxed font-sans">{feedback.critique}</p>
-                                    </div>
+                                    <div className="text-[10px] uppercase font-semibold text-gray-500 mt-1">Score</div>
                                 </div>
+                                <div className="w-px bg-surface-700 self-stretch hidden sm:block" />
+                                <div className="flex-1">
+                                    <p className="text-[15px] text-gray-300 leading-relaxed">{feedback.critique}</p>
+                                </div>
+                            </div>
 
+                            <div className="flex justify-end">
                                 <button
                                     onClick={handleNext}
                                     disabled={finalizing}
-                                    className="btn-glow mt-3 px-6 py-2.5 rounded-lg text-white text-sm font-semibold w-full"
+                                    className="btn-glow px-6 py-2.5 rounded-lg text-sm font-medium"
                                 >
-                                    {finalizing ? (
-                                        <span className="relative z-10 flex items-center justify-center gap-2">
-                                            <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                                            Generating Analytics...
-                                        </span>
-                                    ) : (
-                                        <span className="relative z-10">
-                                            {isLast ? '📊 View Dashboard' : `Next Question →`}
-                                        </span>
-                                    )}
+                                    {finalizing ? 'Generating Report...' : (isLast ? 'View Dashboard' : 'Next Question')}
                                 </button>
                             </div>
                         </div>

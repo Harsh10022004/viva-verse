@@ -26,6 +26,98 @@ class SBERTSingleton:
     def encode(self, texts: List[str]) -> np.ndarray:
         return self._model.encode(texts, convert_to_numpy=True)
 
+class GeminiQGSingleton:
+    """Uses Google Gemini API for highly accurate, dynamic question formulation."""
+    _instance: Optional["GeminiQGSingleton"] = None
+    _client = None
+
+    def __new__(cls):
+        if cls._instance is None:
+            cls._instance = super().__new__(cls)
+            try:
+                from google import genai
+                from dotenv import load_dotenv
+                import os
+                
+                load_dotenv(override=True)
+                # Initialize the client with explicit api_key
+                api_key = os.environ.get("GEMINI_API_KEY")
+                if not api_key:
+                    logger.error("[ERROR] GEMINI_API_KEY is not set in the environment.")
+                cls._client = genai.Client(api_key=api_key)
+                logger.info("[SUCCESS] Gemini API Client initialized.")
+            except ImportError:
+                logger.error("[ERROR] google-genai or python-dotenv library is missing.")
+            except Exception as e:
+                logger.error(f"[ERROR] Failed to initialize Gemini Client: {str(e)}")
+        return cls._instance
+
+    def generate_questions_batch(self, cluster_contexts: List[str]) -> List[str]:
+        """Generates all questions in a single API call to bypass strict Free Tier rate limits."""
+        if not self._client:
+            logger.error("[ERROR] Gemini Client is not initialized.")
+            return ["Could you explain the main idea of this section?"] * len(cluster_contexts)
+            
+        prompt = "You are an expert viva examiner. I will provide you with several distinct semantic clusters from a document.\n"
+        prompt += f"For EACH of the {len(cluster_contexts)} clusters, you must generate a single, highly accurate, comprehensive, and conceptual question.\n"
+        prompt += "The question should require the user to synthesize and analyze the main ideas across that entire section.\n"
+        prompt += "Output your response as a strictly valid JSON array of strings, containing exactly one question per cluster in the same order. Do not include markdown formatting or extra text.\n"
+        prompt += "Example Output: [\"What is the core idea of cluster 0?\", \"How does cluster 1 affect the system?\"]\n\n"
+        
+        for i, ctx in enumerate(cluster_contexts):
+            prompt += f"Cluster {i}:\n{ctx}\n\n"
+
+        max_retries = 3
+        import time
+        import json
+        import re
+        for attempt in range(max_retries):
+            try:
+                response = self._client.models.generate_content(
+                    model='gemini-2.5-flash',
+                    contents=prompt
+                )
+                raw_text = response.text.strip()
+                
+                # Extract and parse JSON array
+                match = re.search(r'\[.*\]', raw_text, re.DOTALL)
+                if match:
+                    parsed_json = json.loads(match.group(0))
+                else:
+                    parsed_json = json.loads(raw_text)
+                    
+                if isinstance(parsed_json, list):
+                    questions = [str(q).strip() for q in parsed_json]
+                else:
+                    questions = []
+                
+                # Fallback if the LLM didn't return enough questions
+                if len(questions) < len(cluster_contexts):
+                    logger.warning(f"[WARNING] Batch generation length mismatch. Expected {len(cluster_contexts)}, got {len(questions)}")
+                    while len(questions) < len(cluster_contexts):
+                        questions.append("Based on the text, what do you think is the most critical implication of this concept?")
+                
+                return questions[:len(cluster_contexts)]
+                
+            except json.JSONDecodeError:
+                err_str = "Failed to parse JSON array from Gemini response."
+                logger.error(f"[ERROR] {err_str} Raw text: {raw_text[:100]}...")
+            except Exception as e:
+                err_str = str(e)
+                if "429" in err_str and attempt < max_retries - 1:
+                    wait_time = 15 * (attempt + 1)
+                    logger.warning(f"[WARNING] Rate limit hit on Batch Request. Waiting {wait_time} seconds before retry {attempt+1}/{max_retries}...")
+                    time.sleep(wait_time)
+                    continue
+                logger.error(f"[ERROR] Gemini batch generation failed. Exception: {err_str}")
+                
+            # If we fall through the except block but have retries left, we wait a bit and retry
+            if attempt < max_retries - 1:
+                time.sleep(5)
+                
+        # If all retries failed
+        return ["Based on the text, what do you think is the most critical implication of this concept?"] * len(cluster_contexts)
+
 
 def _check_verbatim_copy(answer: str, source_chunk: str) -> float:
     """Return a ratio (0-1) of how much of the answer is directly copied."""
@@ -178,6 +270,22 @@ def _generate_human_critique(
     return " ".join(parts)
 
 
+def _check_question_echo(answer: str, question: str) -> float:
+    """Return a ratio (0-1) of how much the answer overlaps with the question vocabulary."""
+    import re
+    from app.utils.constants import STOPWORDS
+    
+    ans_words = set([w for w in re.findall(r'[a-z]+', answer.lower()) if w not in STOPWORDS and len(w) > 3])
+    q_words = set([w for w in re.findall(r'[a-z]+', question.lower()) if w not in STOPWORDS and len(w) > 3])
+    
+    if not ans_words or not q_words:
+        return 0.0
+        
+    overlap = len(ans_words.intersection(q_words))
+    # If the answer mostly consists of words from the question, ratio is high
+    echo_ratio = overlap / len(ans_words) 
+    return echo_ratio
+
 def evaluate_answer(
     answer: str, question: str, source_chunk: str,
     model: SBERTSingleton, intent: str = "", topic: str = ""
@@ -203,6 +311,7 @@ def evaluate_answer(
     source_coverage = float(cosine_similarity([ans_emb], [src_emb])[0][0])
 
     copy_ratio = _check_verbatim_copy(answer, source_chunk)
+    echo_ratio = _check_question_echo(answer, question)
 
     raw_score = (
         ideal_sim * 0.50 +
@@ -211,6 +320,12 @@ def evaluate_answer(
     ) * 100
 
     raw_score = min(100, raw_score * 1.3)
+
+    # Severe penalty for just repeating the question
+    if echo_ratio > 0.7 or (question_relevance > 0.9 and source_coverage < 0.4):
+        penalty = 0.2 # 80% reduction
+        raw_score *= penalty
+        logger.info(f"[INFO] Applied question echo penalty. Echo Ratio: {echo_ratio}")
 
     if copy_ratio > 0.5:
         penalty = 0.35 + (0.65 * (1 - copy_ratio))

@@ -12,11 +12,14 @@ export default function UploadView({ apiBase, onReady, addToast }) {
     const [warnings, setWarnings] = useState([])
     const [conflicts, setConflicts] = useState([])
     const [priorities, setPriorities] = useState({})
+    
+    // New State for Mode Selection
+    const [selectedMode, setSelectedMode] = useState('quick') // 'quick' | 'comprehensive'
+    const [numQuestions, setNumQuestions] = useState(6)
 
     const fileInputRef = useRef(null)
 
     const handleFiles = (newFiles) => {
-        // Allowing all files to test backend API validation
         const arr = Array.from(newFiles)
         setFiles(prev => [...prev, ...arr])
     }
@@ -31,13 +34,20 @@ export default function UploadView({ apiBase, onReady, addToast }) {
         setFiles(prev => prev.filter((_, i) => i !== idx))
     }
 
+    const startVivaProcess = async (currentUploadId = null) => {
+        setStatus('Generating AI questions via Gemini (may take ~30s)...')
+        const vivaRes = await axios.post(`${apiBase}/start-viva`, { mode: selectedMode, num_questions: numQuestions }, { timeout: 120000 })
+        setStatus('Engine initialized!')
+        addToast(`Engine initialized in ${selectedMode === 'quick' ? 'Quick' : 'Comprehensive'} mode!`, 'success')
+        setTimeout(() => onReady(vivaRes.data), 800)
+    }
+
     const handleInitialize = async () => {
         if (files.length === 0) return
         setLoading(true)
 
         try {
-            // Step 1: Upload PDFs
-            setStatus('Parsing documents...')
+            setStatus('Parsing documents & extracting semantics...')
             const formData = new FormData()
             files.forEach(f => formData.append('files', f))
 
@@ -50,11 +60,10 @@ export default function UploadView({ apiBase, onReady, addToast }) {
                 setWarnings(uploadRes.data.warnings || [])
                 setConflicts(uploadRes.data.conflicts || [])
 
-                // Initialize priorities
                 const initialPriorities = {}
-                    ; (uploadRes.data.conflicts || []).forEach(c => {
-                        initialPriorities[c.topic] = [...c.conflicting_docs]
-                    })
+                ;(uploadRes.data.conflicts || []).forEach(c => {
+                    initialPriorities[c.topic] = [...c.conflicting_docs]
+                })
                 setPriorities(initialPriorities)
                 setRequiresConfirmation(true)
                 setLoading(false)
@@ -62,14 +71,8 @@ export default function UploadView({ apiBase, onReady, addToast }) {
             }
 
             setChunkCount(uploadRes.data.total_chunks)
-
-            // Step 2: Start Viva
-            setStatus('Generating questions...')
-            const vivaRes = await axios.post(`${apiBase}/start-viva`)
-
-            setStatus('Engine initialized!')
-            addToast('Documents successfully parsed and engine initialized!', 'success')
-            setTimeout(() => onReady(vivaRes.data), 800)
+            await startVivaProcess()
+            
         } catch (err) {
             const errorMsg = err.response?.data?.detail || err.message
             setStatus(`Error: ${errorMsg}`)
@@ -105,13 +108,7 @@ export default function UploadView({ apiBase, onReady, addToast }) {
                 priorities: priorities
             })
             setChunkCount(confirmRes.data.total_chunks)
-
-            setStatus('Generating questions...')
-            const vivaRes = await axios.post(`${apiBase}/start-viva`)
-
-            setStatus('Engine initialized!')
-            addToast('Conflicts resolved and engine initialized!', 'success')
-            setTimeout(() => onReady(vivaRes.data), 800)
+            await startVivaProcess(uploadId)
         } catch (err) {
             const errorMsg = err.response?.data?.detail || err.message
             setStatus(`Error: ${errorMsg}`)
@@ -122,67 +119,40 @@ export default function UploadView({ apiBase, onReady, addToast }) {
 
     if (requiresConfirmation) {
         return (
-            <div className="max-w-3xl mx-auto px-6 py-16 fade-in-up">
-                <div className="text-center mb-8">
+            <div className="flex-1 flex flex-col items-center justify-center p-8 fade-in-up">
+                <div className="text-center max-w-3xl mb-12">
                     <h2 className="text-3xl font-extrabold text-orange-400 mb-3">
                         Manual Resolution Required
                     </h2>
                     <p className="text-gray-400 max-w-lg mx-auto leading-relaxed">
-                        The Space-Bound Engine detected semantic discrepancies or completely unrelated topics.
+                        The Space-Bound Engine detected semantic discrepancies.
                     </p>
                 </div>
-
-                <div className="space-y-6">
+                <div className="space-y-6 w-full max-w-2xl glass-panel p-8">
                     {warnings.length > 0 && (
                         <div className="bg-orange-500/10 border border-orange-500/30 rounded-xl p-5">
-                            <h3 className="text-orange-400 font-semibold flex items-center gap-2 mb-3">
-                                ⚠️ Topic Warning
-                            </h3>
+                            <h3 className="text-orange-400 font-semibold mb-3">⚠️ Topic Warning</h3>
                             <ul className="list-disc list-inside text-sm text-gray-300 space-y-1">
                                 {warnings.map((w, i) => <li key={i}>{w}</li>)}
                             </ul>
-                            <p className="text-xs text-orange-400/80 mt-3 pt-3 border-t border-orange-500/20">Are you ready to instantiate viva given that the documents cover completely different topics?</p>
                         </div>
                     )}
-
                     {conflicts.length > 0 && (
                         <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-5">
-                            <h3 className="text-red-400 font-semibold flex items-center gap-2 mb-4">
-                                🚨 Factual Discrepancies Detected
-                            </h3>
-                            <p className="text-sm text-gray-300 mb-4">
-                                The engine found contradicting information regarding the exact same topics across different documents. Please select the priority of source truth so we compare against accurate facts.
-                            </p>
-
+                            <h3 className="text-red-400 font-semibold mb-4">🚨 Factual Discrepancies Detected</h3>
                             <div className="space-y-4">
                                 {conflicts.map((c, i) => (
                                     <div key={i} className="bg-gray-800/50 rounded-lg p-4 border border-gray-700/50">
-                                        <p className="font-medium text-gray-200 mb-3">
-                                            Conflict on Topic: <span className="text-brand-400">"{c.topic}"</span>
-                                        </p>
+                                        <p className="font-medium text-gray-200 mb-3">Conflict on: <span className="text-brand-400">"{c.topic}"</span></p>
                                         <div className="space-y-2">
                                             {priorities[c.topic]?.map((docName, idx) => (
                                                 <div key={docName} className="flex items-center justify-between glass p-2 rounded-md">
-                                                    <div className="flex items-center gap-3 text-sm text-gray-300">
-                                                        <span className="w-5 text-center text-brand-500 font-mono text-xs font-bold">{idx + 1}.</span>
-                                                        {docName}
-                                                        {idx === 0 && <span className="text-[10px] text-green-400 ml-2 px-1.5 py-0.5 rounded bg-green-400/10">Highest Priority Truth</span>}
+                                                    <div className="text-sm text-gray-300">
+                                                        <span className="text-brand-500 font-bold mr-2">{idx + 1}.</span>{docName}
                                                     </div>
                                                     <div className="flex gap-1">
-                                                        <button
-                                                            onClick={() => movePriority(c.topic, idx, 'up')}
-                                                            disabled={idx === 0}
-                                                            className="p-1 text-gray-400 hover:text-white disabled:opacity-30"
-                                                        >
-                                                            ▲
-                                                        </button>
-                                                        <button
-                                                            onClick={() => movePriority(c.topic, idx, 'down')}
-                                                            disabled={idx === priorities[c.topic].length - 1}
-                                                            className="p-1 text-gray-400 hover:text-white disabled:opacity-30"
-                                                        >
-                                                            ▼
-                                                        </button>
+                                                        <button onClick={() => movePriority(c.topic, idx, 'up')} disabled={idx === 0} className="p-1 hover:text-white disabled:opacity-30">▲</button>
+                                                        <button onClick={() => movePriority(c.topic, idx, 'down')} disabled={idx === priorities[c.topic].length - 1} className="p-1 hover:text-white disabled:opacity-30">▼</button>
                                                     </div>
                                                 </div>
                                             ))}
@@ -193,31 +163,15 @@ export default function UploadView({ apiBase, onReady, addToast }) {
                         </div>
                     )}
                 </div>
-
                 <div className="mt-8 text-center">
                     {loading ? (
                         <div className="flex flex-col items-center gap-4">
                             <div className="loader-ring" />
-                            <p className="text-brand-400 font-medium">{status}</p>
+                            <p className="gradient-text font-medium">{status}</p>
                         </div>
                     ) : (
                         <div className="flex gap-4 justify-center">
-                            <button
-                                onClick={() => {
-                                    setRequiresConfirmation(false)
-                                    setUploadId('')
-                                    setConflicts([])
-                                }}
-                                className="px-6 py-3 rounded-xl border border-gray-700 text-gray-400 hover:bg-gray-800 transition text-sm font-semibold"
-                            >
-                                Re-upload Documents
-                            </button>
-                            <button
-                                onClick={handleConfirm}
-                                className="btn-glow px-8 py-3 rounded-xl text-white font-semibold text-sm tracking-wide"
-                            >
-                                Confirm & Initialize
-                            </button>
+                            <button onClick={handleConfirm} className="btn-glow px-8 py-3 rounded-xl text-white font-bold tracking-wide">Confirm & Initialize</button>
                         </div>
                     )}
                 </div>
@@ -226,104 +180,138 @@ export default function UploadView({ apiBase, onReady, addToast }) {
     }
 
     return (
-        <div className="max-w-3xl mx-auto px-6 py-16 fade-in-up">
-            {/* Hero */}
-            <div className="text-center mb-12">
-                <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-brand-500/10 border border-brand-500/20 text-brand-400 text-xs font-medium mb-6">
-                    <span className="w-1.5 h-1.5 rounded-full bg-brand-400 animate-pulse" />
-                    Space-Bound Engine v1.0
-                </div>
-                <h2 className="text-4xl font-extrabold gradient-text mb-3">
-                    Upload Your Documents
-                </h2>
-                <p className="text-gray-400 max-w-lg mx-auto leading-relaxed">
-                    Feed your PDFs into the Space-Bound Engine. The AI will analyze, index, and prepare
-                    a personalized viva examination based on the content.
-                </p>
+        <div className="flex-1 flex flex-col items-center justify-center p-8 fade-in-up min-h-[80vh]">
+            <div className="text-center max-w-3xl mb-12">
+                <h1 className="text-5xl md:text-7xl font-extrabold tracking-tight mb-6 leading-tight mt-4">
+                    <span className="text-white">Master Your</span><br/>
+                    <span className="gradient-text">Knowledge</span>
+                </h1>
+                <p className="text-lg text-gray-400 font-medium max-w-xl mx-auto">Upload your documents and let our advanced AI orchestrate a personalized, comprehensive viva examination.</p>
             </div>
 
-            {/* Drop Zone */}
-            <div
-                className={`drop-zone rounded-2xl p-12 text-center cursor-pointer transition-all ${dragOver ? 'drag-over' : ''}`}
-                onDragOver={(e) => { e.preventDefault(); setDragOver(true) }}
-                onDragLeave={() => setDragOver(false)}
-                onDrop={handleDrop}
-                onClick={() => fileInputRef.current?.click()}
-            >
-                <input
-                    ref={fileInputRef}
-                    type="file"
-                    multiple
-                    className="hidden"
-                    onChange={(e) => handleFiles(e.target.files)}
-                />
-
-                <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-brand-500/10 border border-brand-500/20 flex items-center justify-center animate-float">
-                    <svg className="w-8 h-8 text-brand-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
-                    </svg>
+            <div className="w-full max-w-2xl glass-panel rounded-3xl p-1 relative overflow-hidden group transition-all hover:shadow-[0_0_40px_rgba(99,102,241,0.15)] mb-10">
+                <div className="absolute inset-0 bg-gradient-to-r from-brand-500/20 via-purple-500/20 to-pink-500/20 opacity-0 group-hover:opacity-100 transition-opacity duration-700 blur-xl"></div>
+                <div 
+                    className={`relative bg-surface-900/90 backdrop-blur-xl border-2 border-dashed ${dragOver ? 'border-brand-500 bg-brand-500/5' : 'border-surface-600'} rounded-[22px] p-12 text-center transition-all duration-300 flex flex-col items-center`}
+                    onDragOver={(e) => { e.preventDefault(); setDragOver(true) }}
+                    onDragLeave={() => setDragOver(false)}
+                    onDrop={handleDrop}
+                    onClick={() => fileInputRef.current?.click()}
+                >
+                    <input ref={fileInputRef} type="file" multiple className="hidden" onChange={(e) => handleFiles(e.target.files)} />
+                    <div className="w-20 h-20 mb-6 rounded-2xl bg-surface-800/80 border border-white/5 flex items-center justify-center shadow-inner group-hover:scale-110 transition-transform duration-500">
+                        <svg className="w-10 h-10 text-brand-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                        </svg>
+                    </div>
+                    <p className="text-gray-100 font-bold text-xl mb-2">
+                        Drop PDFs here or <span className="text-brand-400">browse</span>
+                    </p>
+                    <p className="text-gray-500 text-sm font-medium">Supports intelligent parsing and noise filtering</p>
                 </div>
-                <p className="text-gray-300 font-medium mb-1">
-                    Drop PDF files here or <span className="text-brand-400 underline">browse</span>
-                </p>
-                <p className="text-gray-500 text-sm">Supports multiple PDF files</p>
             </div>
 
             {/* File List */}
             {files.length > 0 && (
-                <div className="mt-6 space-y-2 fade-in-up">
+                <div className="w-full max-w-2xl mb-10 space-y-3 slide-in-right">
                     {files.map((file, i) => (
-                        <div key={i} className="glass rounded-xl px-4 py-3 flex items-center justify-between group">
-                            <div className="flex items-center gap-3">
-                                <div className="w-10 h-10 rounded-lg bg-red-500/10 border border-red-500/20 flex items-center justify-center flex-shrink-0">
-                                    <svg className="w-5 h-5 text-red-400" fill="currentColor" viewBox="0 0 20 20">
+                        <div key={i} className="glass-panel rounded-2xl px-6 py-4 flex items-center justify-between group hover:border-brand-500/30 transition-colors">
+                            <div className="flex items-center gap-5">
+                                <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-red-500/20 to-orange-500/20 border border-red-500/30 flex items-center justify-center shadow-inner">
+                                    <svg className="w-6 h-6 text-red-400" fill="currentColor" viewBox="0 0 20 20">
                                         <path fillRule="evenodd" d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4z" clipRule="evenodd" />
                                     </svg>
                                 </div>
                                 <div>
-                                    <p className="text-sm font-medium text-gray-200 truncate max-w-xs">{file.name}</p>
-                                    <p className="text-xs text-gray-500">{formatSize(file.size)}</p>
+                                    <p className="text-base font-bold text-gray-100 truncate max-w-[250px]">{file.name}</p>
+                                    <p className="text-xs text-gray-400 font-mono mt-1">{formatSize(file.size)}</p>
                                 </div>
                             </div>
-                            <button
-                                onClick={(e) => { e.stopPropagation(); removeFile(i) }}
-                                className="opacity-0 group-hover:opacity-100 text-gray-500 hover:text-red-400 transition-all p-1"
-                            >
-                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                                </svg>
+                            <button onClick={(e) => { e.stopPropagation(); removeFile(i) }} className="opacity-0 group-hover:opacity-100 text-gray-500 hover:text-red-400 hover:bg-red-500/10 rounded-full p-2 transition-all">
+                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
                             </button>
                         </div>
                     ))}
                 </div>
             )}
 
-            {/* Initialize Button */}
+            {/* Mode & Question Configuration */}
             {files.length > 0 && (
-                <div className="mt-8 text-center fade-in-up">
-                    {loading ? (
-                        <div className="flex flex-col items-center gap-4">
-                            <div className="loader-ring" />
+                <div className="w-full max-w-2xl fade-in-up">
+                    
+                    {/* Question Amount Slider */}
+                    <div className="glass-panel rounded-2xl p-6 mb-8 border border-surface-600">
+                        <div className="flex justify-between items-center mb-4">
                             <div>
-                                <p className="text-brand-400 font-medium">{status}</p>
-                                {chunkCount && (
-                                    <p className="text-gray-500 text-sm mt-1">{chunkCount} semantic chunks indexed</p>
-                                )}
+                                <h4 className="text-lg font-bold text-white">Question Configuration</h4>
+                                <p className="text-sm text-gray-400">Select the number of questions for your Viva</p>
+                            </div>
+                            <div className="bg-brand-500/20 border border-brand-500/30 px-4 py-2 rounded-xl">
+                                <span className="text-2xl font-black text-brand-400">{numQuestions}</span>
+                                <span className="text-xs text-brand-300 ml-1 font-bold">Q's</span>
                             </div>
                         </div>
-                    ) : (
-                        <button
-                            onClick={handleInitialize}
-                            className="btn-glow px-8 py-3.5 rounded-xl text-white font-semibold text-sm tracking-wide"
+                        <div className="px-2">
+                            <input 
+                                type="range" 
+                                min="3" 
+                                max="10" 
+                                step="1" 
+                                value={numQuestions} 
+                                onChange={(e) => setNumQuestions(Number(e.target.value))}
+                                className="w-full h-2 bg-surface-800 rounded-lg appearance-none cursor-pointer accent-brand-500 focus:outline-none"
+                            />
+                            <div className="flex justify-between text-xs text-gray-500 font-bold mt-2 px-1">
+                                <span>3 (Quick)</span>
+                                <span>10 (Deep Dive)</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-10">
+                        {/* Quick Start Card */}
+                        <div 
+                            onClick={() => setSelectedMode('quick')}
+                            className={`cursor-pointer rounded-2xl p-6 transition-all duration-300 border ${selectedMode === 'quick' ? 'border-brand-500 bg-brand-500/10 shadow-[0_0_20px_rgba(99,102,241,0.2)]' : 'border-surface-700 bg-surface-900/50 hover:border-surface-600'}`}
                         >
-                            <span className="relative z-10 flex items-center gap-2">
-                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-                                </svg>
-                                Initialize Space-Bound Engine
-                            </span>
-                        </button>
-                    )}
+                            <div className="flex items-center gap-4 mb-3">
+                                <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-lg ${selectedMode === 'quick' ? 'bg-brand-500 text-white' : 'bg-surface-800 text-gray-400'}`}>⚡</div>
+                                <h4 className={`text-lg font-bold ${selectedMode === 'quick' ? 'text-white' : 'text-gray-300'}`}>Static Assessment</h4>
+                            </div>
+                            <p className="text-sm text-gray-400 leading-relaxed">Evaluates semantic clusters with predetermined generative questions.</p>
+                        </div>
+
+                        {/* Comprehensive Card */}
+                        <div 
+                            onClick={() => setSelectedMode('comprehensive')}
+                            className={`cursor-pointer rounded-2xl p-6 transition-all duration-300 border ${selectedMode === 'comprehensive' ? 'border-purple-500 bg-purple-500/10 shadow-[0_0_20px_rgba(168,85,247,0.2)]' : 'border-surface-700 bg-surface-900/50 hover:border-surface-600'}`}
+                        >
+                            <div className="flex items-center gap-4 mb-3">
+                                <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-lg ${selectedMode === 'comprehensive' ? 'bg-purple-500 text-white' : 'bg-surface-800 text-gray-400'}`}>🧠</div>
+                                <div>
+                                    <h4 className={`text-lg font-bold ${selectedMode === 'comprehensive' ? 'text-white' : 'text-gray-300'}`}>Agentic Adaptive</h4>
+                                    <span className="text-[10px] uppercase font-bold text-purple-400 tracking-widest block">Multi-Agent</span>
+                                </div>
+                            </div>
+                            <p className="text-sm text-gray-400 leading-relaxed">Dynamic, conversational questioning driven by an AI Supervisor.</p>
+                        </div>
+                    </div>
+
+                    <div className="flex justify-center">
+                        {loading ? (
+                            <div className="flex items-center gap-3 text-sm text-gray-300 font-medium glass-panel px-6 py-3 rounded-xl">
+                                <div className="w-5 h-5 border-2 border-t-brand-500 border-white/10 rounded-full animate-spin" />
+                                {status}
+                            </div>
+                        ) : (
+                            <button
+                                onClick={handleInitialize}
+                                className="btn-primary w-full md:w-auto"
+                            >
+                                Initialize Assessment Engine
+                            </button>
+                        )}
+                    </div>
                 </div>
             )}
         </div>
