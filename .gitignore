@@ -40,3 +40,9 @@ Thumbs.db
 .idea/
 *.swp
 *.swo
+
+# =====================
+# App Data / Temporary
+# =====================
+*.db
+backend/temp_uploads/
