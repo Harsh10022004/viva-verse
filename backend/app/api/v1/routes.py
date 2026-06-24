@@ -12,6 +12,12 @@ from app.schemas.models import SubmitAnswerRequest, FinalizeRequest, ConfirmUplo
 from app.services.parser_service import DocumentStore, extract_text_from_pdf, chunk_text, generate_questions
 from app.services.llm_service import evaluate_answer, SBERTSingleton
 from app.services.agent_orchestrator import SupervisorAgent
+from fastapi import Depends
+from app.utils.auth import get_current_user
+from app.database_models import User, VivaSession
+from app.database import get_db
+from sqlalchemy.orm import Session
+import json
 
 logger = logging.getLogger(__name__)
 
@@ -28,7 +34,7 @@ def extract_top_keywords(text: str, top_n=8) -> set:
     return set([w for w, c in Counter(valid_words).most_common(top_n)])
 
 @router.post("/upload")
-async def upload_documents(files: List[UploadFile] = File(...)):
+async def upload_documents(files: List[UploadFile] = File(...), current_user: User = Depends(get_current_user)):
     """Parse multiple PDFs into semantic text chunks and load into the engine."""
     global doc_store
     doc_store = DocumentStore()  # reset on new upload
@@ -173,7 +179,7 @@ async def upload_documents(files: List[UploadFile] = File(...)):
     }
 
 @router.post("/confirm-upload")
-async def confirm_upload(req: ConfirmUploadRequest):
+async def confirm_upload(req: ConfirmUploadRequest, current_user: User = Depends(get_current_user)):
     """Resolve conflicts with user priority and finalize document upload."""
     if req.upload_id not in pending_uploads:
         raise HTTPException(404, "Upload session not found or expired.")
@@ -221,7 +227,7 @@ async def confirm_upload(req: ConfirmUploadRequest):
     }
 
 @router.post("/start-viva")
-async def start_viva(req: StartVivaRequest = StartVivaRequest(mode="quick")):
+async def start_viva(req: StartVivaRequest = StartVivaRequest(mode="quick"), current_user: User = Depends(get_current_user)):
     """Start a new viva session. Mode determines static vs agent-driven flow."""
     if len(doc_store.chunks) == 0:
         logger.error("[ERROR 400] Expected chunks but doc_store is empty.")
@@ -263,7 +269,7 @@ async def start_viva(req: StartVivaRequest = StartVivaRequest(mode="quick")):
         }
 
 @router.post("/submit-answer")
-async def submit_answer(req: SubmitAnswerRequest):
+async def submit_answer(req: SubmitAnswerRequest, current_user: User = Depends(get_current_user)):
     """Evaluate a user's answer. In comprehensive mode, return the next dynamic question."""
     session = sessions.get(req.session_id)
     if not session:
@@ -344,7 +350,7 @@ async def submit_answer(req: SubmitAnswerRequest):
         }
 
 @router.post("/finalize")
-async def finalize(req: FinalizeRequest):
+async def finalize(req: FinalizeRequest, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     """Aggregate scores and return full analytics for the dashboard."""
     session = sessions.get(req.session_id)
     if not session:
@@ -453,6 +459,23 @@ async def finalize(req: FinalizeRequest):
 
     session["final_knowledge_map"] = final_knowledge_map
     
+    # Save session to DB
+    try:
+        db_session = VivaSession(
+            id=req.session_id,
+            user_id=current_user.id,
+            mode=session.get("mode", "quick"),
+            overall_score=overall_score,
+            answers_json=json.dumps(answers),
+            heatmap_json=json.dumps(recall_heatmap),
+            knowledge_map_json=json.dumps(final_knowledge_map)
+        )
+        db.add(db_session)
+        db.commit()
+    except Exception as e:
+        logger.error(f"[ERROR] Failed to save session to DB: {str(e)}")
+        db.rollback()
+    
     logger.info(f"[SUCCESS] Viva Session {req.session_id} Finalized with Overall Score: {overall_score}.")
     
     return {
@@ -473,9 +496,18 @@ import os
 import fitz
 
 @router.get("/download-report/{session_id}")
-async def download_report(session_id: str):
+async def download_report(session_id: str, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     """Generate and return an annotated PDF with performance highlights."""
     session = sessions.get(session_id)
+    
+    # If not in memory, try to load from DB
+    if not session or "final_knowledge_map" not in session:
+        db_session = db.query(VivaSession).filter(VivaSession.id == session_id, VivaSession.user_id == current_user.id).first()
+        if db_session and db_session.knowledge_map_json:
+            session = {
+                "final_knowledge_map": json.loads(db_session.knowledge_map_json)
+            }
+            
     if not session or "final_knowledge_map" not in session:
         raise HTTPException(404, "Session not found or not finalized.")
 
@@ -583,3 +615,33 @@ async def download_report(session_id: str):
         
     return FileResponse(out_pdf_path, filename=f"Viva_Report_{file_name}", media_type="application/pdf")
 
+@router.get("/sessions")
+async def get_user_sessions(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """Get all past sessions for the current user."""
+    db_sessions = db.query(VivaSession).filter(VivaSession.user_id == current_user.id).order_by(VivaSession.created_at.desc()).all()
+    return [
+        {
+            "id": s.id,
+            "mode": s.mode,
+            "overall_score": s.overall_score,
+            "created_at": s.created_at.isoformat(),
+        }
+        for s in db_sessions
+    ]
+
+@router.get("/sessions/{session_id}")
+async def get_session_details(session_id: str, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """Get details of a specific past session."""
+    s = db.query(VivaSession).filter(VivaSession.id == session_id, VivaSession.user_id == current_user.id).first()
+    if not s:
+        raise HTTPException(404, "Session not found")
+        
+    return {
+        "id": s.id,
+        "mode": s.mode,
+        "overall_score": s.overall_score,
+        "created_at": s.created_at.isoformat(),
+        "answers": json.loads(s.answers_json) if s.answers_json else {},
+        "recall_heatmap": json.loads(s.heatmap_json) if s.heatmap_json else [],
+        "knowledge_map": json.loads(s.knowledge_map_json) if s.knowledge_map_json else []
+    }

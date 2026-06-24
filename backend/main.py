@@ -3,6 +3,8 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from app.api.v1.routes import router as api_router
+from app.api.v1.auth_routes import router as auth_router
+from app.database import engine, Base
 
 # Configure simple logging to stdout
 logging.basicConfig(
@@ -14,6 +16,9 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 app = FastAPI(title="The Viva Verse", version="1.0.0")
+
+# Create tables
+Base.metadata.create_all(bind=engine)
 
 # CORS — registered first, allow_credentials=False required when allow_origins=["*"]
 app.add_middleware(
@@ -36,6 +41,7 @@ async def global_exception_handler(request: Request, exc: Exception):
     )
 
 app.include_router(api_router, prefix="/api/v1")
+app.include_router(auth_router, prefix="/api/v1/auth", tags=["auth"])
 
 @app.on_event("startup")
 async def startup_event():
