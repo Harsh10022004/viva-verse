@@ -10,3 +10,6 @@ torch>=2.0.0
 google-genai>=0.1.0
 python-dotenv>=1.0.0
 PyMuPDF>=1.23.0
+sqlalchemy>=2.0.0
+passlib[bcrypt]>=1.7.4
+pyjwt>=2.8.0
