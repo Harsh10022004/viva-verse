@@ -1,7 +1,7 @@
 import { useState, useRef } from 'react'
 import axios from 'axios'
 
-export default function UploadView({ apiBase, onReady, addToast }) {
+export default function UploadView({ apiBase, token, onReady, addToast }) {
     const [files, setFiles] = useState([])
     const [loading, setLoading] = useState(false)
     const [status, setStatus] = useState('')
@@ -36,7 +36,7 @@ export default function UploadView({ apiBase, onReady, addToast }) {
 
     const startVivaProcess = async (currentUploadId = null) => {
         setStatus('Generating AI questions via Gemini (may take ~30s)...')
-        const vivaRes = await axios.post(`${apiBase}/start-viva`, { mode: selectedMode, num_questions: numQuestions }, { timeout: 120000 })
+        const vivaRes = await axios.post(`${apiBase}/start-viva`, { mode: selectedMode, num_questions: numQuestions }, { timeout: 120000, headers: { Authorization: `Bearer ${token}` } })
         setStatus('Engine initialized!')
         addToast(`Engine initialized in ${selectedMode === 'quick' ? 'Quick' : 'Comprehensive'} mode!`, 'success')
         setTimeout(() => onReady(vivaRes.data), 800)
@@ -52,7 +52,7 @@ export default function UploadView({ apiBase, onReady, addToast }) {
             files.forEach(f => formData.append('files', f))
 
             const uploadRes = await axios.post(`${apiBase}/upload`, formData, {
-                headers: { 'Content-Type': 'multipart/form-data' }
+                headers: { 'Content-Type': 'multipart/form-data', 'Authorization': `Bearer ${token}` }
             })
 
             if (uploadRes.data.status === 'requires_confirmation') {
@@ -106,6 +106,8 @@ export default function UploadView({ apiBase, onReady, addToast }) {
             const confirmRes = await axios.post(`${apiBase}/confirm-upload`, {
                 upload_id: uploadId,
                 priorities: priorities
+            }, {
+                headers: { Authorization: `Bearer ${token}` }
             })
             setChunkCount(confirmRes.data.total_chunks)
             await startVivaProcess(uploadId)

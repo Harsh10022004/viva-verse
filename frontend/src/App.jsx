@@ -1,17 +1,56 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import UploadView from './components/UploadView'
 import VivaTerminal from './components/VivaTerminal'
 import Dashboard from './components/Dashboard'
 import Toast from './components/Toast'
+import LoginView from './components/LoginView'
+import HistoryView from './components/HistoryView'
 
 const API = 'http://localhost:8000/api/v1'
 
 function App() {
-    const [view, setView] = useState('upload') // 'upload' | 'viva' | 'dashboard'
+    const [view, setView] = useState('login') // 'login' | 'upload' | 'viva' | 'dashboard' | 'history'
     const [sessionId, setSessionId] = useState(null)
     const [questions, setQuestions] = useState([])
     const [analytics, setAnalytics] = useState(null)
     const [toasts, setToasts] = useState([])
+    const [token, setToken] = useState(localStorage.getItem('token') || null)
+    const [user, setUser] = useState(null)
+
+    useEffect(() => {
+        if (token) {
+            // Verify token / get me
+            fetch(`${API}/auth/me`, {
+                headers: { 'Authorization': `Bearer ${token}` }
+            })
+            .then(res => res.ok ? res.json() : Promise.reject())
+            .then(data => {
+                setUser(data);
+                if(view === 'login') setView('upload');
+            })
+            .catch(() => {
+                handleLogout();
+            });
+        } else {
+            setView('login');
+        }
+    }, [token]);
+
+    const handleLogin = (newToken, userData) => {
+        localStorage.setItem('token', newToken);
+        setToken(newToken);
+        setUser(userData);
+        setView('upload');
+    };
+
+    const handleLogout = () => {
+        localStorage.removeItem('token');
+        setToken(null);
+        setUser(null);
+        setView('login');
+        setSessionId(null);
+        setAnalytics(null);
+    };
 
     const addToast = (message, type = 'info') => {
         const id = Date.now()
@@ -41,6 +80,11 @@ function App() {
         setAnalytics(null)
     }
 
+    const handleReviewSession = (sessionData) => {
+        setAnalytics(sessionData);
+        setView('dashboard');
+    }
+
     return (
         <div className="min-h-screen relative">
             <Toast toasts={toasts} removeToast={removeToast} />
@@ -60,50 +104,46 @@ function App() {
                         </div>
                     </div>
 
-                    {/* Progress Steps */}
-                    <div className="flex items-center gap-2">
-                        {['Upload', 'Viva', 'Dashboard'].map((step, i) => {
-                            const stepKey = ['upload', 'viva', 'dashboard'][i]
-                            const isActive = view === stepKey
-                            const isDone = ['upload', 'viva', 'dashboard'].indexOf(view) > i
-                            return (
-                                <div key={step} className="flex items-center gap-2">
-                                    {i > 0 && <div className={`w-6 h-px ${isDone ? 'bg-gray-400' : 'bg-surface-800'}`} />}
-                                    <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-[11px] font-semibold transition-all duration-300 ${isActive
-                                        ? 'bg-surface-800 text-gray-100 border border-surface-600'
-                                        : isDone
-                                            ? 'text-gray-400'
-                                            : 'text-gray-600'
-                                        }`}>
-                                        {isDone ? (
-                                            <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20">
-                                                <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                                            </svg>
-                                        ) : (
-                                            <span className={`w-1.5 h-1.5 rounded-full ${isActive ? 'bg-gray-300' : 'bg-surface-700'}`} />
-                                        )}
-                                        {step}
-                                    </div>
+                    {/* Progress Steps or Auth Profile */}
+                    {user ? (
+                        <div className="flex items-center gap-4">
+                            <button
+                                onClick={() => setView('history')}
+                                className={`text-xs font-semibold px-3 py-1.5 rounded-md border transition-all ${view === 'history' ? 'bg-surface-800 text-blue-400 border-blue-500/50' : 'bg-transparent text-gray-400 border-surface-700 hover:text-gray-200'}`}
+                            >
+                                My History
+                            </button>
+                            <div className="h-4 w-px bg-surface-700"></div>
+                            <div className="flex items-center gap-2">
+                                <div className="w-6 h-6 rounded-full bg-blue-600/20 text-blue-400 flex items-center justify-center text-xs font-bold border border-blue-500/30 uppercase">
+                                    {user.username.charAt(0)}
                                 </div>
-                            )
-                        })}
-                    </div>
+                                <span className="text-xs font-medium text-gray-300">{user.username}</span>
+                            </div>
+                            <button onClick={handleLogout} className="text-xs text-red-400 hover:text-red-300 font-medium ml-2">
+                                Logout
+                            </button>
+                        </div>
+                    ) : null}
                 </div>
             </header>
 
             {/* Main Content */}
             <main className="relative z-10">
-                {view === 'upload' && <UploadView apiBase={API} onReady={handleEngineReady} addToast={addToast} />}
+                {view === 'login' && <LoginView apiBase={API} onLogin={handleLogin} addToast={addToast} />}
+                {view === 'history' && <HistoryView apiBase={API} token={token} onReviewSession={handleReviewSession} onBack={() => setView('upload')} addToast={addToast} />}
+                {view === 'upload' && <UploadView apiBase={API} token={token} onReady={handleEngineReady} addToast={addToast} />}
                 {view === 'viva' && (
                     <VivaTerminal
                         apiBase={API}
+                        token={token}
                         sessionId={sessionId}
                         questions={questions}
                         onComplete={handleVivaComplete}
                         addToast={addToast}
                     />
                 )}
-                {view === 'dashboard' && <Dashboard analytics={analytics} onRestart={handleRestart} />}
+                {view === 'dashboard' && <Dashboard apiBase={API} token={token} analytics={analytics} onRestart={handleRestart} />}
             </main>
         </div>
     )

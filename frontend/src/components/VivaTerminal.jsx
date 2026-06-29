@@ -4,7 +4,7 @@ import axios from 'axios'
 const SpeechRecognition = typeof window !== 'undefined' && (window.SpeechRecognition || window.webkitSpeechRecognition)
 const voiceSupported = !!SpeechRecognition
 
-export default function VivaTerminal({ apiBase, sessionId, questions: initialQuestions, onComplete, addToast }) {
+export default function VivaTerminal({ apiBase, token, sessionId, questions: initialQuestions, onComplete, addToast }) {
     const [localQuestions, setLocalQuestions] = useState(initialQuestions)
     const [currentIdx, setCurrentIdx] = useState(0)
     const [answer, setAnswer] = useState('')
@@ -93,6 +93,8 @@ export default function VivaTerminal({ apiBase, sessionId, questions: initialQue
                 session_id: sessionId,
                 question_id: current.id,
                 answer: answer,
+            }, {
+                headers: { Authorization: `Bearer ${token}` }
             })
 
             const fb = res.data
@@ -125,7 +127,7 @@ export default function VivaTerminal({ apiBase, sessionId, questions: initialQue
         if (isLast || isComplete) {
             setFinalizing(true)
             try {
-                const res = await axios.post(`${apiBase}/finalize`, { session_id: sessionId })
+                const res = await axios.post(`${apiBase}/finalize`, { session_id: sessionId }, { headers: { Authorization: `Bearer ${token}` } })
                 addToast('Viva finalized. Generating your 3D Dashboard!', 'success')
                 onComplete(res.data)
             } catch (err) {

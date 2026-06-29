@@ -16,10 +16,31 @@ import { Radar, Chart as ReactChart } from 'react-chartjs-2'
 
 ChartJS.register(RadialLinearScale, PointElement, LineElement, Filler, Tooltip, Legend, CategoryScale, LinearScale, BarElement, Title)
 
-export default function Dashboard({ analytics, onRestart }) {
+export default function Dashboard({ apiBase, token, analytics, onRestart }) {
     const [activeTab, setActiveTab] = useState('overview')
 
     if (!analytics) return null
+
+    const handleDownloadReport = async () => {
+        try {
+            const response = await fetch(`${apiBase}/download-report/${analytics.session_id}`, {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            if (!response.ok) throw new Error('Download failed');
+            const blob = await response.blob();
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `Viva_Report_${analytics.session_id.slice(0, 8)}.pdf`;
+            document.body.appendChild(a);
+            a.click();
+            window.URL.revokeObjectURL(url);
+            document.body.removeChild(a);
+        } catch (error) {
+            console.error('Download error:', error);
+            alert('Failed to download report.');
+        }
+    };
 
     const {
         overall_score,
@@ -373,7 +394,7 @@ export default function Dashboard({ analytics, onRestart }) {
             {/* Actions */}
             <div className="flex flex-col sm:flex-row justify-center gap-4 mt-10">
                 <button
-                    onClick={() => window.open(`http://127.0.0.1:8000/api/v1/download-report/${analytics.session_id}`, '_blank')}
+                    onClick={handleDownloadReport}
                     className="bg-white text-black px-6 py-3 rounded-xl font-bold inline-flex items-center justify-center gap-2 hover:bg-gray-200 transition-colors shadow-lg"
                 >
                     <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
