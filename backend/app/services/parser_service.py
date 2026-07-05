@@ -146,7 +146,7 @@ def _cluster_semantic_chunks(store: "DocumentStore", num: int = 6) -> List[Dict]
     
     total = len(store.chunks)
     if total <= num:
-        return [{"indices": [i], "best_idx": i} for i in range(total)]
+        return [{"cluster_id": i, "indices": [i], "best_idx": i, "top_3_indices": [i]} for i in range(total)]
 
     embeddings = store.embeddings
     
