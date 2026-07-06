@@ -247,6 +247,9 @@ async def start_viva(req: StartVivaRequest = StartVivaRequest(mode="quick"), cur
             "current_question": action["question"],
             "questions": questions, # keep for compat
             "answers": {},
+            "api_key": req.api_key,
+            "provider": req.provider,
+            "model": req.model
         }
         logger.info(f"[SUCCESS] Comprehensive Viva Session {session_id} Started.")
         return {
@@ -259,7 +262,10 @@ async def start_viva(req: StartVivaRequest = StartVivaRequest(mode="quick"), cur
         sessions[session_id] = {
             "mode": "quick",
             "questions": questions,
-            "answers": {},  
+            "answers": {},
+            "api_key": req.api_key,
+            "provider": req.provider,
+            "model": req.model
         }
         logger.info(f"[SUCCESS] Quick Viva Session {session_id} Started.")
         return {

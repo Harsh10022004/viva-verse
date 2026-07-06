@@ -4,6 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from app.api.v1.routes import router as api_router
 from app.api.v1.auth_routes import router as auth_router
+from app.api.v1.coach_routes import router as coach_router
 from app.database import engine, Base
 
 # Configure simple logging to stdout
@@ -42,6 +43,7 @@ async def global_exception_handler(request: Request, exc: Exception):
 
 app.include_router(api_router, prefix="/api/v1")
 app.include_router(auth_router, prefix="/api/v1/auth", tags=["auth"])
+app.include_router(coach_router, prefix="/api/v1/coach", tags=["coach"])
 
 @app.on_event("startup")
 async def startup_event():
