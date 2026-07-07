@@ -50,7 +50,7 @@ def test_upload_blank_pdf(client):
     assert "no readable text" in res.json()["detail"]
 
 def test_upload_duplicate_pdf(client):
-    pdf_bytes = create_dummy_pdf("We need to create at least 15 words to ensure it isn't skipped. Hello world, software engineering is great! ")
+    pdf_bytes = create_dummy_pdf("We need to create at least 15 words to ensure it isn't skipped. Hello world, software engineering is great! " * 10)
     files = [
         ("files", ("duplicate.pdf", pdf_bytes, "application/pdf")),
         ("files", ("duplicate.pdf", pdf_bytes, "application/pdf")),
@@ -144,7 +144,7 @@ def test_submit_answer_invalid_session(client):
 
 def test_submit_answer_invalid_question(client):
     # Edge Case: Invalid Question ID
-    pdf_bytes = create_dummy_pdf("Knowledge " * 20)
+    pdf_bytes = create_dummy_pdf("Knowledge is power. It allows humans to achieve impossible things. Software engineering requires deep thought and careful validation. " * 5)
     client.post("/api/v1/upload", files={"files": ("test.pdf", pdf_bytes, "application/pdf")})
     res_start = client.post("/api/v1/start-viva")
     sid = res_start.json()["session_id"]
@@ -159,7 +159,7 @@ def test_submit_answer_invalid_question(client):
 
 def test_submit_answer_empty_text(client):
     # Edge Case: Empty Answer
-    pdf_bytes = create_dummy_pdf("Knowledge " * 20)
+    pdf_bytes = create_dummy_pdf("Knowledge is power. It allows humans to achieve impossible things. Software engineering requires deep thought and careful validation. " * 5)
     client.post("/api/v1/upload", files={"files": ("test.pdf", pdf_bytes, "application/pdf")})
     res_start = client.post("/api/v1/start-viva")
     sid = res_start.json()["session_id"]
@@ -176,7 +176,7 @@ def test_submit_answer_empty_text(client):
 
 def test_submit_answer_success(client):
     # Happy Path 4: Submit a valid answer
-    pdf_bytes = create_dummy_pdf("Knowledge " * 20)
+    pdf_bytes = create_dummy_pdf("Knowledge is power. It allows humans to achieve impossible things. Software engineering requires deep thought and careful validation. " * 5)
     client.post("/api/v1/upload", files={"files": ("test.pdf", pdf_bytes, "application/pdf")})
     res_start = client.post("/api/v1/start-viva")
     sid = res_start.json()["session_id"]
@@ -198,7 +198,7 @@ def test_finalize_invalid_session(client):
 
 def test_finalize_no_answers(client):
     # Edge case: finalize before answering any questions
-    pdf_bytes = create_dummy_pdf("Knowledge " * 20)
+    pdf_bytes = create_dummy_pdf("Knowledge is power. It allows humans to achieve impossible things. Software engineering requires deep thought and careful validation. " * 5)
     client.post("/api/v1/upload", files={"files": ("test.pdf", pdf_bytes, "application/pdf")})
     res_start = client.post("/api/v1/start-viva")
     sid = res_start.json()["session_id"]

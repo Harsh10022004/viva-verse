@@ -29,6 +29,10 @@ def mock_sbert():
     instance = SBERTSingleton()
     instance._model = MockEncoder()
 
+from app.utils.auth import get_current_user
+from app.database_models import User
+
 @pytest.fixture
 def client():
+    app.dependency_overrides[get_current_user] = lambda: User(id=1, username="testuser", email="test@example.com", hashed_password="pw", role="student")
     return TestClient(app)
