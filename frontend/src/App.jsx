@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react'
 import UploadView from './components/UploadView'
 import VivaTerminal from './components/VivaTerminal'
+import CoachTerminal from './components/CoachTerminal'
+import SetupStudio from './components/SetupStudio'
 import Dashboard from './components/Dashboard'
 import Toast from './components/Toast'
 import LoginView from './components/LoginView'
@@ -9,38 +11,21 @@ import HistoryView from './components/HistoryView'
 const API = 'http://localhost:8000/api/v1'
 
 function App() {
-    const [view, setView] = useState('login') // 'login' | 'upload' | 'viva' | 'dashboard' | 'history'
+    const [view, setView] = useState('studio') // 'login' | 'studio' | 'upload' | 'viva' | 'coach' | 'dashboard' | 'history'
     const [sessionId, setSessionId] = useState(null)
     const [questions, setQuestions] = useState([])
     const [analytics, setAnalytics] = useState(null)
     const [toasts, setToasts] = useState([])
-    const [token, setToken] = useState(localStorage.getItem('token') || null)
-    const [user, setUser] = useState(null)
-
-    useEffect(() => {
-        if (token) {
-            // Verify token / get me
-            fetch(`${API}/auth/me`, {
-                headers: { 'Authorization': `Bearer ${token}` }
-            })
-            .then(res => res.ok ? res.json() : Promise.reject())
-            .then(data => {
-                setUser(data);
-                if(view === 'login') setView('upload');
-            })
-            .catch(() => {
-                handleLogout();
-            });
-        } else {
-            setView('login');
-        }
-    }, [token]);
+    const [token, setToken] = useState('free-passthrough-token')
+    const [user, setUser] = useState({ id: 1, username: 'Candidate Explorer', role: 'student' })
+    const [coachConfig, setCoachConfig] = useState(null)
+    const [byokConfig, setByokConfig] = useState(null)
 
     const handleLogin = (newToken, userData) => {
         localStorage.setItem('token', newToken);
         setToken(newToken);
         setUser(userData);
-        setView('upload');
+        setView('studio');
     };
 
     const handleLogout = () => {
@@ -74,7 +59,7 @@ function App() {
     }
 
     const handleRestart = () => {
-        setView('upload')
+        setView('studio')
         setSessionId(null)
         setQuestions([])
         setAnalytics(null)
@@ -86,41 +71,44 @@ function App() {
     }
 
     return (
-        <div className="min-h-screen relative">
+        <div className="min-h-screen relative bg-black text-zinc-100">
             <Toast toasts={toasts} removeToast={removeToast} />
-            {/* Background particles */}
             <div className="bg-particles" />
 
-            {/* Header */}
-            <header className="relative z-10 border-b border-surface-800 bg-black/50 backdrop-blur-md">
+            <header className="relative z-10 border-b border-zinc-800 bg-black/95 backdrop-blur-xl">
                 <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-lg bg-surface-800 border border-surface-700 flex items-center justify-center text-gray-100 font-bold text-sm">
+                    <div className="flex items-center gap-3 cursor-pointer group" onClick={() => user && setView('studio')}>
+                        <div className="w-9 h-9 rounded-xl bg-zinc-900 border border-white/20 flex items-center justify-center text-white font-black text-base shadow-sm group-hover:bg-zinc-800 transition">
                             V
                         </div>
                         <div>
-                            <h1 className="text-base font-semibold text-gray-100">The Viva Verse</h1>
-                            <p className="text-[10px] text-gray-500 uppercase tracking-widest font-medium">Semantic Examination</p>
+                            <h1 className="text-base font-extrabold text-white tracking-tight">The Viva Verse</h1>
+                            <p className="text-[10px] text-zinc-400 uppercase tracking-widest font-bold">Production AI Interrogation Studio</p>
                         </div>
                     </div>
 
-                    {/* Progress Steps or Auth Profile */}
                     {user ? (
                         <div className="flex items-center gap-4">
                             <button
-                                onClick={() => setView('history')}
-                                className={`text-xs font-semibold px-3 py-1.5 rounded-md border transition-all ${view === 'history' ? 'bg-surface-800 text-blue-400 border-blue-500/50' : 'bg-transparent text-gray-400 border-surface-700 hover:text-gray-200'}`}
+                                onClick={() => setView('studio')}
+                                className={`text-xs font-bold px-3.5 py-2 rounded-xl border transition-all ${view === 'studio' ? 'bg-white text-black border-white shadow-[0_0_15px_rgba(255,255,255,0.2)]' : 'bg-transparent text-zinc-400 border-zinc-800 hover:text-white hover:border-zinc-700'}`}
                             >
-                                My History
+                                ⚡ Setup Studio
                             </button>
-                            <div className="h-4 w-px bg-surface-700"></div>
+                            <button
+                                onClick={() => setView('history')}
+                                className={`text-xs font-bold px-3.5 py-2 rounded-xl border transition-all ${view === 'history' ? 'bg-white text-black border-white shadow-[0_0_15px_rgba(255,255,255,0.2)]' : 'bg-transparent text-zinc-400 border-zinc-800 hover:text-white hover:border-zinc-700'}`}
+                            >
+                                📜 Archives
+                            </button>
+                            <div className="h-4 w-px bg-zinc-800"></div>
                             <div className="flex items-center gap-2">
-                                <div className="w-6 h-6 rounded-full bg-blue-600/20 text-blue-400 flex items-center justify-center text-xs font-bold border border-blue-500/30 uppercase">
+                                <div className="w-7 h-7 rounded-full bg-zinc-900 text-zinc-200 flex items-center justify-center text-xs font-extrabold border border-zinc-700 uppercase">
                                     {user.username.charAt(0)}
                                 </div>
-                                <span className="text-xs font-medium text-gray-300">{user.username}</span>
+                                <span className="text-xs font-semibold text-zinc-300 hidden sm:inline">{user.username}</span>
                             </div>
-                            <button onClick={handleLogout} className="text-xs text-red-400 hover:text-red-300 font-medium ml-2">
+                            <button onClick={handleLogout} className="text-xs text-zinc-500 hover:text-rose-400 font-bold ml-1 transition">
                                 Logout
                             </button>
                         </div>
@@ -128,10 +116,28 @@ function App() {
                 </div>
             </header>
 
-            {/* Main Content */}
             <main className="relative z-10">
                 {view === 'login' && <LoginView apiBase={API} onLogin={handleLogin} addToast={addToast} />}
-                {view === 'history' && <HistoryView apiBase={API} token={token} onReviewSession={handleReviewSession} onBack={() => setView('upload')} addToast={addToast} />}
+                {view === 'studio' && (
+                    <SetupStudio
+                        apiBase={API}
+                        token={token}
+                        user={user}
+                        onStartCoach={(cfg) => { setCoachConfig(cfg); setView('coach'); }}
+                        onStartDocumentDefense={(cfg) => { setByokConfig(cfg); setView('upload'); }}
+                        addToast={addToast}
+                    />
+                )}
+                {view === 'coach' && coachConfig && (
+                    <CoachTerminal
+                        apiBase={API}
+                        token={token}
+                        config={coachConfig}
+                        onExit={() => setView('studio')}
+                        addToast={addToast}
+                    />
+                )}
+                {view === 'history' && <HistoryView apiBase={API} token={token} onReviewSession={handleReviewSession} onBack={() => setView('studio')} addToast={addToast} />}
                 {view === 'upload' && <UploadView apiBase={API} token={token} onReady={handleEngineReady} addToast={addToast} />}
                 {view === 'viva' && (
                     <VivaTerminal
