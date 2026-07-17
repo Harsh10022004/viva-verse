@@ -1,0 +1,1367 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Interview Coach — Powered by Gemma 4</title>
+    <meta name="description" content="Free AI interview practice tool powered by Google Gemma 4. Practice behavioral, technical, system design interviews with real-time AI feedback. Zero backend, 100% free, forever.">
+    
+    <!-- Open Graph / Social -->
+    <meta property="og:title" content="Interview Coach — AI-Powered Interview Practice">
+    <meta property="og:description" content="Practice interviews with an AI coach that adapts, evaluates, and gives brutally honest feedback. Powered by Google Gemma 4. 100% free.">
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="https://hajirufai.github.io/gemma4-interview-coach/">
+    <meta property="og:image" content="https://hajirufai.github.io/gemma4-interview-coach/og-image.png">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="Interview Coach — Powered by Gemma 4">
+    <meta name="twitter:description" content="Free AI interview practice. 6 modes. Real-time feedback. Zero backend.">
+    
+    <!-- PWA / Mobile -->
+    <meta name="theme-color" content="#1e3a5f">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎯</text></svg>">
+    
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        brand: { 50:'#eff6ff', 100:'#dbeafe', 200:'#bfdbfe', 400:'#60a5fa', 500:'#3b82f6', 600:'#2563eb', 700:'#1d4ed8', 800:'#1e40af', 900:'#1e3a5f' },
+                        surface: { 50:'#f8fafc', 100:'#f1f5f9', 200:'#e2e8f0', 300:'#cbd5e1', 400:'#94a3b8', 500:'#64748b', 700:'#334155', 800:'#1e293b', 900:'#0f172a', 950:'#020617' }
+                    },
+                    fontFamily: { sans: ['Inter', 'system-ui', 'sans-serif'] }
+                }
+            }
+        }
+    </script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: 'Inter', system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+        
+        /* Gradients */
+        .gradient-bg { background: linear-gradient(135deg, #0f172a 0%, #1e3a5f 30%, #1d4ed8 70%, #3b82f6 100%); }
+        .gradient-text { background: linear-gradient(135deg, #3b82f6, #8b5cf6); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
+        .gradient-border { border-image: linear-gradient(135deg, #3b82f6, #8b5cf6) 1; }
+        
+        /* Glass */
+        .glass { background: rgba(255,255,255,0.08); backdrop-filter: blur(12px); border: 1px solid rgba(255,255,255,0.12); }
+        .glass-dark { background: rgba(0,0,0,0.2); backdrop-filter: blur(12px); border: 1px solid rgba(255,255,255,0.08); }
+        
+        /* Animations */
+        .thinking-dot { animation: pulse 1.4s ease-in-out infinite; }
+        .thinking-dot:nth-child(2) { animation-delay: 0.2s; }
+        .thinking-dot:nth-child(3) { animation-delay: 0.4s; }
+        @keyframes pulse { 0%,80%,100% { opacity:0.3; transform:scale(0.8); } 40% { opacity:1; transform:scale(1.1); } }
+        .fade-in { animation: fadeIn 0.4s cubic-bezier(0.16, 1, 0.3, 1); }
+        @keyframes fadeIn { from { opacity:0; transform:translateY(12px); } to { opacity:1; transform:translateY(0); } }
+        .slide-up { animation: slideUp 0.6s cubic-bezier(0.16, 1, 0.3, 1); }
+        @keyframes slideUp { from { opacity:0; transform:translateY(30px); } to { opacity:1; transform:translateY(0); } }
+        .float { animation: float 6s ease-in-out infinite; }
+        @keyframes float { 0%,100% { transform:translateY(0); } 50% { transform:translateY(-10px); } }
+        @keyframes shake { 0%,100%{transform:translateX(0)} 20%{transform:translateX(-6px)} 40%{transform:translateX(6px)} 60%{transform:translateX(-4px)} 80%{transform:translateX(4px)} }
+        @keyframes countUp { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        .count-up { animation: countUp 0.5s ease-out; }
+        
+        /* Chat */
+        .msg-bubble { max-width: 85%; }
+        @media (max-width: 640px) { .msg-bubble { max-width: 95%; } }
+        
+        /* Focus */
+        textarea:focus, input:focus, select:focus { outline: none; box-shadow: 0 0 0 3px rgba(59,130,246,0.3); }
+        
+        /* Markdown */
+        .markdown-content h1,.markdown-content h2,.markdown-content h3 { font-weight:700; margin:0.8em 0 0.4em; }
+        .markdown-content h1 { font-size:1.3em; }
+        .markdown-content h2 { font-size:1.15em; }
+        .markdown-content h3 { font-size:1.05em; }
+        .markdown-content p { margin: 0.5em 0; line-height: 1.75; }
+        .markdown-content ul, .markdown-content ol { margin: 0.5em 0; padding-left: 1.5em; }
+        .markdown-content li { margin: 0.3em 0; line-height: 1.65; }
+        .markdown-content code { background: rgba(59,130,246,0.1); color: #3b82f6; padding: 0.15em 0.4em; border-radius: 4px; font-size: 0.88em; font-weight: 500; }
+        .dark .markdown-content code { background: rgba(96,165,250,0.15); color: #60a5fa; }
+        .markdown-content pre { background: #0f172a; color: #e2e8f0; padding: 1em 1.2em; border-radius: 10px; overflow-x: auto; margin: 0.8em 0; border: 1px solid rgba(255,255,255,0.06); }
+        .markdown-content pre code { background: none; padding: 0; color: inherit; font-weight: 400; }
+        .markdown-content strong { font-weight: 700; color: #1e293b; }
+        .dark .markdown-content strong { color: #f1f5f9; }
+        .markdown-content blockquote { border-left: 3px solid #3b82f6; padding-left: 1em; color: #64748b; margin: 0.8em 0; font-style: italic; }
+        .markdown-content table { border-collapse: collapse; width: 100%; margin: 0.8em 0; font-size: 0.9em; }
+        .markdown-content th, .markdown-content td { border: 1px solid #e2e8f0; padding: 0.5em 0.8em; text-align: left; }
+        .dark .markdown-content th, .dark .markdown-content td { border-color: #334155; }
+        .markdown-content th { background: #f1f5f9; font-weight: 600; }
+        .dark .markdown-content th { background: #1e293b; }
+        
+        /* Scrollbar */
+        #chatMessages::-webkit-scrollbar { width: 6px; }
+        #chatMessages::-webkit-scrollbar-track { background: transparent; }
+        #chatMessages::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+        .dark #chatMessages::-webkit-scrollbar-thumb { background: #334155; }
+        
+        /* Mode cards */
+        .mode-card { transition: all 0.2s ease; cursor: pointer; }
+        .mode-card:hover { transform: translateY(-2px); box-shadow: 0 8px 25px rgba(0,0,0,0.1); }
+        .mode-card.selected { border-color: #3b82f6 !important; }
+        .mode-card.selected .mode-inner { background: #eff6ff; }
+        .dark .mode-card.selected .mode-inner { background: rgba(59,130,246,0.15); }
+        
+        /* Image preview */
+        .image-preview { max-height: 200px; border-radius: 12px; object-fit: cover; }
+        
+        /* Collapsible sections */
+        .collapsible-header { cursor: pointer; user-select: none; }
+        .collapsible-content { max-height: 0; overflow: hidden; transition: max-height 0.3s ease; }
+        .collapsible-content.open { max-height: 500px; }
+        
+        /* Timer pulse */
+        .timer-active { animation: timerPulse 2s ease-in-out infinite; }
+        @keyframes timerPulse { 0%,100% { opacity: 1; } 50% { opacity: 0.7; } }
+        
+        /* Touch targets for mobile */
+        @media (max-width: 640px) {
+            button, .mode-card, label[class*="cursor-pointer"] { min-height: 44px; }
+            .mobile-stack { flex-direction: column !important; }
+            .mobile-full { width: 100% !important; }
+        }
+        
+        /* Print styles for report export */
+        @media print {
+            body { background: white !important; }
+            #chatScreen, #setupScreen, .sticky { display: none !important; }
+            #resultsModal { position: static !important; background: white !important; }
+            #resultsModal > div { max-height: none !important; box-shadow: none !important; }
+        }
+    </style>
+</head>
+<body class="bg-surface-50 dark:bg-surface-950 min-h-screen transition-colors">
+
+    <!-- ==================== LANDING / SETUP SCREEN ==================== -->
+    <div id="setupScreen" class="min-h-screen flex flex-col">
+        <!-- Hero -->
+        <div class="gradient-bg text-white py-12 sm:py-16 md:py-24 px-4 relative overflow-hidden">
+            <div class="absolute inset-0 opacity-10">
+                <div class="absolute top-20 left-10 w-64 h-64 bg-blue-400 rounded-full blur-3xl float"></div>
+                <div class="absolute bottom-10 right-20 w-80 h-80 bg-purple-400 rounded-full blur-3xl float" style="animation-delay:-3s"></div>
+            </div>
+            <div class="max-w-4xl mx-auto text-center relative z-10">
+                <div class="inline-flex items-center gap-2 glass rounded-full px-4 py-1.5 text-xs font-medium mb-6 slide-up">
+                    <span class="w-2 h-2 bg-green-400 rounded-full animate-pulse"></span>
+                    Powered by Google Gemma 4 · Open Source
+                </div>
+                <h1 class="text-4xl sm:text-5xl md:text-7xl font-black mb-5 slide-up leading-tight" style="animation-delay:0.1s">
+                    Your AI<br>Interview Coach
+                </h1>
+                <p class="text-base sm:text-lg md:text-xl text-blue-100 max-w-2xl mx-auto slide-up px-2" style="animation-delay:0.2s">
+                    Practice interviews with an AI that adapts to your level, evaluates your answers in real-time, and gives brutally honest feedback. 100% free, forever.
+                </p>
+                <div class="flex flex-wrap justify-center gap-2 sm:gap-3 mt-6 sm:mt-8 slide-up px-2" style="animation-delay:0.3s">
+                    <div class="glass rounded-full px-3 sm:px-4 py-1.5 sm:py-2 text-xs sm:text-sm">🧠 128K Context</div>
+                    <div class="glass rounded-full px-3 sm:px-4 py-1.5 sm:py-2 text-xs sm:text-sm">⚡ Chain-of-Thought</div>
+                    <div class="glass rounded-full px-3 sm:px-4 py-1.5 sm:py-2 text-xs sm:text-sm">🎤 Voice Mode</div>
+                    <div class="glass rounded-full px-3 sm:px-4 py-1.5 sm:py-2 text-xs sm:text-sm">📸 Image Analysis</div>
+                    <div class="glass rounded-full px-3 sm:px-4 py-1.5 sm:py-2 text-xs sm:text-sm">📄 Resume-Aware</div>
+                    <div class="glass rounded-full px-3 sm:px-4 py-1.5 sm:py-2 text-xs sm:text-sm">🔓 Open & Free</div>
+                </div>
+                <!-- Stats bar -->
+                <div class="flex justify-center gap-6 sm:gap-10 mt-8 sm:mt-10 slide-up" style="animation-delay:0.4s">
+                    <div class="text-center">
+                        <div class="text-2xl sm:text-3xl font-black">6</div>
+                        <div class="text-xs text-blue-200">Practice Modes</div>
+                    </div>
+                    <div class="text-center">
+                        <div class="text-2xl sm:text-3xl font-black">4</div>
+                        <div class="text-xs text-blue-200">AI Providers</div>
+                    </div>
+                    <div class="text-center">
+                        <div class="text-2xl sm:text-3xl font-black">$0</div>
+                        <div class="text-xs text-blue-200">Cost Forever</div>
+                    </div>
+                    <div class="text-center">
+                        <div class="text-2xl sm:text-3xl font-black">0</div>
+                        <div class="text-xs text-blue-200">Backend Servers</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Setup Form -->
+        <div class="flex-1 flex items-start justify-center px-3 sm:px-4 py-8 sm:py-10 -mt-6 sm:-mt-8">
+            <div class="w-full max-w-2xl">
+                <div class="bg-white dark:bg-surface-900 rounded-2xl shadow-xl dark:shadow-2xl p-5 sm:p-6 md:p-8 border border-surface-100 dark:border-surface-800">
+                    <div class="flex items-center justify-between mb-5 sm:mb-6">
+                        <h2 class="text-lg sm:text-xl font-bold text-surface-800 dark:text-surface-100">Configure Your Session</h2>
+                        <button onclick="toggleDarkMode()" class="p-2 rounded-lg hover:bg-surface-100 dark:hover:bg-surface-800 transition text-surface-500" aria-label="Toggle dark mode">
+                            <svg id="darkIcon" class="w-5 h-5 hidden dark:block" fill="currentColor" viewBox="0 0 20 20"><path d="M10 2a1 1 0 011 1v1a1 1 0 11-2 0V3a1 1 0 011-1zm4 8a4 4 0 11-8 0 4 4 0 018 0zm-.464 4.95l.707.707a1 1 0 001.414-1.414l-.707-.707a1 1 0 00-1.414 1.414zm2.12-10.607a1 1 0 010 1.414l-.706.707a1 1 0 11-1.414-1.414l.707-.707a1 1 0 011.414 0zM17 11a1 1 0 100-2h-1a1 1 0 100 2h1zm-7 4a1 1 0 011 1v1a1 1 0 11-2 0v-1a1 1 0 011-1zM5.05 6.464A1 1 0 106.465 5.05l-.708-.707a1 1 0 00-1.414 1.414l.707.707zm1.414 8.486l-.707.707a1 1 0 01-1.414-1.414l.707-.707a1 1 0 011.414 1.414zM4 11a1 1 0 100-2H3a1 1 0 000 2h1z"/></svg>
+                            <svg id="lightIcon" class="w-5 h-5 block dark:hidden" fill="currentColor" viewBox="0 0 20 20"><path d="M17.293 13.293A8 8 0 016.707 2.707a8.001 8.001 0 1010.586 10.586z"/></svg>
+                        </button>
+                    </div>
+
+                    <!-- API Provider -->
+                    <div class="mb-4">
+                        <label class="block text-sm font-semibold text-surface-700 dark:text-surface-300 mb-1.5">API Provider</label>
+                        <div class="grid grid-cols-2 gap-2 sm:gap-3">
+                            <label class="cursor-pointer">
+                                <input type="radio" name="provider" value="google" checked class="hidden peer" onchange="updateProviderUI()">
+                                <div class="peer-checked:border-brand-500 peer-checked:bg-brand-50 dark:peer-checked:bg-brand-500/10 border-2 border-surface-200 dark:border-surface-700 rounded-xl p-2.5 sm:p-3 transition">
+                                    <div class="font-semibold text-xs sm:text-sm text-surface-800 dark:text-surface-200">🔷 Google AI Studio</div>
+                                    <div class="text-[10px] sm:text-xs text-surface-400 mt-0.5">Direct API — best quality</div>
+                                </div>
+                            </label>
+                            <label class="cursor-pointer">
+                                <input type="radio" name="provider" value="openrouter" class="hidden peer" onchange="updateProviderUI()">
+                                <div class="peer-checked:border-brand-500 peer-checked:bg-brand-50 dark:peer-checked:bg-brand-500/10 border-2 border-surface-200 dark:border-surface-700 rounded-xl p-2.5 sm:p-3 transition">
+                                    <div class="font-semibold text-xs sm:text-sm text-surface-800 dark:text-surface-200">🌐 OpenRouter</div>
+                                    <div class="text-[10px] sm:text-xs text-surface-400 mt-0.5">Free tier fallback</div>
+                                </div>
+                            </label>
+                            <label class="cursor-pointer">
+                                <input type="radio" name="provider" value="nvidia" class="hidden peer" onchange="updateProviderUI()">
+                                <div class="peer-checked:border-brand-500 peer-checked:bg-brand-50 dark:peer-checked:bg-brand-500/10 border-2 border-surface-200 dark:border-surface-700 rounded-xl p-2.5 sm:p-3 transition">
+                                    <div class="font-semibold text-xs sm:text-sm text-surface-800 dark:text-surface-200">💚 NVIDIA NIM</div>
+                                    <div class="text-[10px] sm:text-xs text-surface-400 mt-0.5">Fast inference — free</div>
+                                </div>
+                            </label>
+                            <label class="cursor-pointer">
+                                <input type="radio" name="provider" value="huggingface" class="hidden peer" onchange="updateProviderUI()">
+                                <div class="peer-checked:border-brand-500 peer-checked:bg-brand-50 dark:peer-checked:bg-brand-500/10 border-2 border-surface-200 dark:border-surface-700 rounded-xl p-2.5 sm:p-3 transition">
+                                    <div class="font-semibold text-xs sm:text-sm text-surface-800 dark:text-surface-200">🤗 Hugging Face</div>
+                                    <div class="text-[10px] sm:text-xs text-surface-400 mt-0.5">Open-source hub — free</div>
+                                </div>
+                            </label>
+                        </div>
+                    </div>
+
+                    <!-- API Key -->
+                    <div class="mb-4">
+                        <label class="block text-sm font-semibold text-surface-700 dark:text-surface-300 mb-1.5" id="apiKeyLabel">Google AI Studio API Key</label>
+                        <div class="flex gap-2">
+                            <div class="relative flex-1">
+                                <input type="password" id="apiKey" placeholder="AIzaSy..." class="w-full px-3 sm:px-4 py-3 border border-surface-200 dark:border-surface-700 rounded-xl text-sm bg-white dark:bg-surface-800 dark:text-surface-100 focus:border-brand-500 transition pr-10">
+                                <button onclick="toggleKeyVisibility()" class="absolute right-3 top-3 text-surface-400 hover:text-surface-600 transition" aria-label="Toggle key visibility">
+                                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
+                                </button>
+                            </div>
+                            <button onclick="testApiKey()" id="testKeyBtn" class="px-3 sm:px-4 py-3 bg-surface-100 dark:bg-surface-800 hover:bg-surface-200 dark:hover:bg-surface-700 border border-surface-200 dark:border-surface-700 rounded-xl text-sm font-medium text-surface-600 dark:text-surface-400 transition whitespace-nowrap">
+                                Test Key
+                            </button>
+                        </div>
+                        <div class="flex items-center gap-2 mt-1.5">
+                            <p class="text-xs text-surface-400" id="apiKeyHint">Free at <a href="https://aistudio.google.com/apikey" target="_blank" class="text-brand-500 hover:underline">aistudio.google.com</a> — stays in your browser, never sent to any server.</p>
+                            <span id="keyTestResult" class="hidden text-xs font-medium flex items-center gap-1"></span>
+                        </div>
+                    </div>
+
+                    <!-- Practice Mode -->
+                    <div class="mb-4">
+                        <label class="block text-sm font-semibold text-surface-700 dark:text-surface-300 mb-2">Practice Mode</label>
+                        <div class="grid grid-cols-3 sm:grid-cols-3 md:grid-cols-6 gap-2">
+                            <div class="mode-card selected border-2 border-brand-500 rounded-xl text-center" data-mode="behavioral" onclick="selectMode(this)">
+                                <div class="mode-inner rounded-[10px] p-2.5 sm:p-3 bg-brand-50 dark:bg-brand-500/15">
+                                    <div class="text-xl sm:text-2xl mb-0.5">🗣️</div>
+                                    <div class="text-[10px] sm:text-xs font-semibold text-surface-800 dark:text-surface-200">Behavioral</div>
+                                </div>
+                            </div>
+                            <div class="mode-card border-2 border-surface-200 dark:border-surface-700 rounded-xl text-center" data-mode="technical" onclick="selectMode(this)">
+                                <div class="mode-inner rounded-[10px] p-2.5 sm:p-3">
+                                    <div class="text-xl sm:text-2xl mb-0.5">💻</div>
+                                    <div class="text-[10px] sm:text-xs font-semibold text-surface-800 dark:text-surface-200">Technical</div>
+                                </div>
+                            </div>
+                            <div class="mode-card border-2 border-surface-200 dark:border-surface-700 rounded-xl text-center" data-mode="system-design" onclick="selectMode(this)">
+                                <div class="mode-inner rounded-[10px] p-2.5 sm:p-3">
+                                    <div class="text-xl sm:text-2xl mb-0.5">🏗️</div>
+                                    <div class="text-[10px] sm:text-xs font-semibold text-surface-800 dark:text-surface-200">System Design</div>
+                                </div>
+                            </div>
+                            <div class="mode-card border-2 border-surface-200 dark:border-surface-700 rounded-xl text-center" data-mode="assessment" onclick="selectMode(this)">
+                                <div class="mode-inner rounded-[10px] p-2.5 sm:p-3">
+                                    <div class="text-xl sm:text-2xl mb-0.5">📝</div>
+                                    <div class="text-[10px] sm:text-xs font-semibold text-surface-800 dark:text-surface-200">Assessment</div>
+                                </div>
+                            </div>
+                            <div class="mode-card border-2 border-surface-200 dark:border-surface-700 rounded-xl text-center" data-mode="certification" onclick="selectMode(this)">
+                                <div class="mode-inner rounded-[10px] p-2.5 sm:p-3">
+                                    <div class="text-xl sm:text-2xl mb-0.5">🏆</div>
+                                    <div class="text-[10px] sm:text-xs font-semibold text-surface-800 dark:text-surface-200">Certification</div>
+                                </div>
+                            </div>
+                            <div class="mode-card border-2 border-surface-200 dark:border-surface-700 rounded-xl text-center" data-mode="case-study" onclick="selectMode(this)">
+                                <div class="mode-inner rounded-[10px] p-2.5 sm:p-3">
+                                    <div class="text-xl sm:text-2xl mb-0.5">📊</div>
+                                    <div class="text-[10px] sm:text-xs font-semibold text-surface-800 dark:text-surface-200">Case Study</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Role + Level -->
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 mb-4">
+                        <div>
+                            <label class="block text-sm font-semibold text-surface-700 dark:text-surface-300 mb-1.5">Target Role</label>
+                            <input type="text" id="targetRole" placeholder="e.g. Frontend Engineer, AWS SA..." class="w-full px-3 sm:px-4 py-3 border border-surface-200 dark:border-surface-700 rounded-xl text-sm bg-white dark:bg-surface-800 dark:text-surface-100 focus:border-brand-500 transition">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-semibold text-surface-700 dark:text-surface-300 mb-1.5">Experience Level</label>
+                            <select id="experienceLevel" class="w-full px-3 sm:px-4 py-3 border border-surface-200 dark:border-surface-700 rounded-xl text-sm bg-white dark:bg-surface-800 dark:text-surface-100 focus:border-brand-500 transition">
+                                <option value="entry">🌱 Entry Level (0-2 yrs)</option>
+                                <option value="mid" selected>📈 Mid Level (2-5 yrs)</option>
+                                <option value="senior">🚀 Senior (5-10 yrs)</option>
+                                <option value="lead">⭐ Lead / Staff (10+ yrs)</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <!-- Job Description (NEW) -->
+                    <div class="mb-4">
+                        <div class="collapsible-header flex items-center justify-between text-sm font-semibold text-surface-700 dark:text-surface-300 mb-1.5" onclick="toggleCollapsible('jdSection')">
+                            <span>📄 Job Description <span class="text-xs font-normal text-surface-400">(optional — tailors questions)</span></span>
+                            <svg id="jdChevron" class="w-4 h-4 transition-transform text-surface-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+                        </div>
+                        <div id="jdSection" class="collapsible-content">
+                            <textarea id="jobDescription" rows="3" placeholder="Paste the job description here... Gemma 4 will tailor interview questions to match the role's requirements, tech stack, and responsibilities." class="w-full px-3 sm:px-4 py-3 border border-surface-200 dark:border-surface-700 rounded-xl text-sm bg-white dark:bg-surface-800 dark:text-surface-100 focus:border-brand-500 transition resize-none mt-1"></textarea>
+                        </div>
+                    </div>
+
+                    <!-- Resume (NEW) -->
+                    <div class="mb-5">
+                        <div class="collapsible-header flex items-center justify-between text-sm font-semibold text-surface-700 dark:text-surface-300 mb-1.5" onclick="toggleCollapsible('resumeSection')">
+                            <span>📋 Your Resume / Background <span class="text-xs font-normal text-surface-400">(optional — personalizes feedback)</span></span>
+                            <svg id="resumeChevron" class="w-4 h-4 transition-transform text-surface-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+                        </div>
+                        <div id="resumeSection" class="collapsible-content">
+                            <textarea id="resumeText" rows="3" placeholder="Paste your resume or key background info... The coach will evaluate your answers in context of your experience and suggest how to leverage your specific background." class="w-full px-3 sm:px-4 py-3 border border-surface-200 dark:border-surface-700 rounded-xl text-sm bg-white dark:bg-surface-800 dark:text-surface-100 focus:border-brand-500 transition resize-none mt-1"></textarea>
+                        </div>
+                    </div>
+
+                    <!-- Model Selection -->
+                    <div class="mb-5 sm:mb-6">
+                        <label class="block text-sm font-semibold text-surface-700 dark:text-surface-300 mb-1.5">Gemma 4 Model</label>
+                        <div class="grid grid-cols-2 gap-2 sm:gap-3">
+                            <label class="cursor-pointer">
+                                <input type="radio" name="model" value="gemma-4-26b-a4b-it" class="hidden peer">
+                                <div class="peer-checked:border-brand-500 peer-checked:bg-brand-50 dark:peer-checked:bg-brand-500/10 border-2 border-surface-200 dark:border-surface-700 rounded-xl p-2.5 sm:p-3 transition">
+                                    <div class="font-semibold text-xs sm:text-sm text-surface-800 dark:text-surface-200">⚡ 26B MoE</div>
+                                    <div class="text-[10px] sm:text-xs text-surface-400 mt-0.5">~4B active · fast replies</div>
+                                </div>
+                            </label>
+                            <label class="cursor-pointer">
+                                <input type="radio" name="model" value="gemma-4-31b-it" checked class="hidden peer">
+                                <div class="peer-checked:border-brand-500 peer-checked:bg-brand-50 dark:peer-checked:bg-brand-500/10 border-2 border-surface-200 dark:border-surface-700 rounded-xl p-2.5 sm:p-3 transition">
+                                    <div class="font-semibold text-xs sm:text-sm text-surface-800 dark:text-surface-200">🧠 31B Dense</div>
+                                    <div class="text-[10px] sm:text-xs text-surface-400 mt-0.5">Deepest reasoning</div>
+                                </div>
+                            </label>
+                        </div>
+                    </div>
+
+                    <button onclick="startSession()" id="startBtn" class="w-full py-3.5 sm:py-4 bg-gradient-to-r from-brand-600 to-brand-500 hover:from-brand-700 hover:to-brand-600 text-white font-bold rounded-xl transition-all active:scale-[0.98] shadow-lg hover:shadow-xl text-sm sm:text-base">
+                        🚀 Start Practice Session
+                    </button>
+                </div>
+
+                <!-- Feature cards -->
+                <div class="mt-6 sm:mt-8 grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
+                    <div class="bg-white dark:bg-surface-900 rounded-xl p-4 sm:p-5 shadow-sm border border-surface-100 dark:border-surface-800">
+                        <div class="text-2xl mb-2">🧠</div>
+                        <h3 class="font-bold text-sm text-surface-800 dark:text-surface-200">128K Context Memory</h3>
+                        <p class="text-xs text-surface-400 mt-1">Remembers your entire session — references earlier answers in follow-ups and final report.</p>
+                    </div>
+                    <div class="bg-white dark:bg-surface-900 rounded-xl p-4 sm:p-5 shadow-sm border border-surface-100 dark:border-surface-800">
+                        <div class="text-2xl mb-2">📄</div>
+                        <h3 class="font-bold text-sm text-surface-800 dark:text-surface-200">Resume + JD Aware</h3>
+                        <p class="text-xs text-surface-400 mt-1">Paste your resume and job description — questions are tailored to the exact role you're targeting.</p>
+                    </div>
+                    <div class="bg-white dark:bg-surface-900 rounded-xl p-4 sm:p-5 shadow-sm border border-surface-100 dark:border-surface-800">
+                        <div class="text-2xl mb-2">📊</div>
+                        <h3 class="font-bold text-sm text-surface-800 dark:text-surface-200">Score & Study Plan</h3>
+                        <p class="text-xs text-surface-400 mt-1">Get scored on 5 dimensions with a personalized 7-day study plan at session end.</p>
+                    </div>
+                </div>
+
+                <!-- Built for challenge badge -->
+                <div class="mt-6 text-center">
+                    <a href="https://dev.to/challenges/google-gemma-2026-05-06" target="_blank" class="inline-flex items-center gap-2 px-4 py-2 bg-white dark:bg-surface-900 border border-surface-200 dark:border-surface-700 rounded-full text-xs font-medium text-surface-600 dark:text-surface-400 hover:border-brand-500 transition shadow-sm">
+                        🏆 Built for the DEV.to Gemma 4 Challenge
+                    </a>
+                </div>
+            </div>
+        </div>
+
+        <footer class="text-center py-5 sm:py-6 text-xs text-surface-400 space-y-1 px-4">
+            <div>Built with ❤️ using <a href="https://ai.google.dev/gemma" class="hover:underline text-brand-500">Google Gemma 4</a> · <a href="https://interview-buddy.com" class="hover:underline text-brand-500">Interview Buddy</a></div>
+            <div><a href="https://github.com/hajirufai/gemma4-interview-coach" target="_blank" class="hover:underline">⭐ Star on GitHub</a> · <a href="https://buymeacoffee.com/hajirufai" target="_blank" class="hover:underline">☕ Buy Me a Coffee</a></div>
+        </footer>
+    </div>
+
+    <!-- ==================== CHAT SCREEN ==================== -->
+    <div id="chatScreen" class="hidden min-h-screen flex flex-col bg-surface-50 dark:bg-surface-950">
+        <!-- Header -->
+        <div class="gradient-bg text-white px-3 sm:px-4 py-2.5 sm:py-3 flex items-center justify-between shadow-lg sticky top-0 z-10">
+            <div class="flex items-center gap-2 sm:gap-3 min-w-0">
+                <span class="text-xl sm:text-2xl">🎯</span>
+                <div class="min-w-0">
+                    <h1 class="font-bold text-sm sm:text-base">Interview Coach</h1>
+                    <p class="text-[10px] sm:text-xs text-blue-200 truncate" id="sessionInfo">Session</p>
+                </div>
+            </div>
+            <div class="flex items-center gap-1.5 sm:gap-2 flex-shrink-0">
+                <!-- Timer -->
+                <div class="glass rounded-lg px-2 sm:px-3 py-1 sm:py-1.5 text-[10px] sm:text-xs font-mono font-medium timer-active" id="sessionTimer">
+                    00:00
+                </div>
+                <!-- Stats -->
+                <div class="glass rounded-lg px-2 sm:px-3 py-1 sm:py-1.5 text-[10px] sm:text-xs font-medium hidden sm:block">
+                    <span id="questionCount">Q: 0</span> · <span id="tokenCount">0 tok</span>
+                </div>
+                <!-- Voice toggle -->
+                <button id="voiceToggleBtn" onclick="toggleVoiceMode()" class="glass rounded-lg px-2 sm:px-3 py-1 sm:py-1.5 text-[10px] sm:text-xs font-medium hover:bg-white/10 transition flex items-center gap-1" title="Toggle voice mode">
+                    <span id="voiceToggleLabel">🔇</span>
+                </button>
+                <!-- Dark mode -->
+                <button onclick="toggleDarkMode()" class="glass rounded-lg p-1 sm:p-1.5 hover:bg-white/10 transition hidden sm:block">
+                    <svg class="w-3.5 h-3.5 sm:w-4 sm:h-4 hidden dark:block" fill="currentColor" viewBox="0 0 20 20"><path d="M10 2a1 1 0 011 1v1a1 1 0 11-2 0V3a1 1 0 011-1zm4 8a4 4 0 11-8 0 4 4 0 018 0z"/></svg>
+                    <svg class="w-3.5 h-3.5 sm:w-4 sm:h-4 block dark:hidden" fill="currentColor" viewBox="0 0 20 20"><path d="M17.293 13.293A8 8 0 016.707 2.707a8.001 8.001 0 1010.586 10.586z"/></svg>
+                </button>
+                <!-- End -->
+                <button onclick="showEndConfirm()" class="glass rounded-lg px-2 sm:px-3 py-1 sm:py-1.5 text-[10px] sm:text-xs font-medium hover:bg-red-500/20 transition">End ✕</button>
+            </div>
+        </div>
+
+        <!-- Context indicator (shows if JD or resume provided) -->
+        <div id="contextBar" class="hidden bg-brand-50 dark:bg-brand-500/10 border-b border-brand-100 dark:border-brand-500/20 px-4 py-1.5">
+            <div class="max-w-4xl mx-auto flex items-center gap-3 text-xs text-brand-700 dark:text-brand-400">
+                <span id="contextJD" class="hidden">📄 JD loaded</span>
+                <span id="contextResume" class="hidden">📋 Resume loaded</span>
+                <span class="text-brand-400">— Coach is personalizing questions to your profile</span>
+            </div>
+        </div>
+
+        <!-- Messages -->
+        <div id="chatMessages" class="flex-1 overflow-y-auto px-3 sm:px-4 py-4 sm:py-6 space-y-3 sm:space-y-4 max-w-4xl mx-auto w-full"></div>
+
+        <!-- Image Preview -->
+        <div id="imagePreview" class="hidden max-w-4xl mx-auto w-full px-3 sm:px-4 pb-2">
+            <div class="bg-white dark:bg-surface-800 rounded-xl p-3 border border-surface-200 dark:border-surface-700 flex items-center gap-3">
+                <img id="previewImg" class="h-12 sm:h-16 w-12 sm:w-16 object-cover rounded-lg">
+                <div class="flex-1 min-w-0">
+                    <p class="text-sm font-medium text-surface-700 dark:text-surface-300 truncate" id="previewName">image.png</p>
+                    <p class="text-xs text-surface-400">Will be sent with your next message</p>
+                </div>
+                <button onclick="clearImage()" class="text-surface-400 hover:text-red-500 transition p-1 flex-shrink-0">✕</button>
+            </div>
+        </div>
+
+        <!-- Input -->
+        <div class="sticky bottom-0 bg-white dark:bg-surface-900 border-t border-surface-200 dark:border-surface-800 px-3 sm:px-4 py-2.5 sm:py-3 shadow-lg">
+            <div class="max-w-4xl mx-auto">
+                <div class="flex gap-1.5 sm:gap-2 mb-2 overflow-x-auto pb-0.5">
+                    <label class="cursor-pointer flex items-center gap-1 sm:gap-1.5 px-2.5 sm:px-3 py-1.5 bg-surface-100 dark:bg-surface-800 hover:bg-surface-200 dark:hover:bg-surface-700 rounded-lg transition text-[10px] sm:text-xs font-medium text-surface-600 dark:text-surface-400 flex-shrink-0">
+                        📸 Image
+                        <input type="file" id="imageInput" accept="image/*" class="hidden" onchange="handleImageUpload(event)">
+                    </label>
+                    <button onclick="requestFeedback()" class="flex items-center gap-1 sm:gap-1.5 px-2.5 sm:px-3 py-1.5 bg-amber-50 dark:bg-amber-500/10 hover:bg-amber-100 dark:hover:bg-amber-500/20 rounded-lg transition text-[10px] sm:text-xs font-medium text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-500/20 flex-shrink-0">
+                        📊 Score Me
+                    </button>
+                    <div class="flex-1"></div>
+                    <button onclick="viewHistory()" class="flex items-center gap-1 sm:gap-1.5 px-2.5 sm:px-3 py-1.5 bg-surface-100 dark:bg-surface-800 hover:bg-surface-200 dark:hover:bg-surface-700 rounded-lg transition text-[10px] sm:text-xs font-medium text-surface-600 dark:text-surface-400 flex-shrink-0">
+                        📋 History
+                    </button>
+                </div>
+                <div class="flex gap-2">
+                    <button onclick="toggleMic()" id="micBtn" class="px-2.5 sm:px-3 py-2.5 sm:py-3 rounded-xl transition-all text-sm border border-surface-200 dark:border-surface-700 bg-white dark:bg-surface-800 hover:bg-surface-100 dark:hover:bg-surface-700 text-surface-500 dark:text-surface-400 disabled:opacity-50 flex-shrink-0" title="Click to speak">
+                        <svg id="micIcon" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11a7 7 0 01-14 0m14 0a7 7 0 00-14 0m14 0v1a7 7 0 01-14 0v-1m7 8v3m-4 0h8M12 1a3 3 0 00-3 3v7a3 3 0 006 0V4a3 3 0 00-3-3z"/></svg>
+                        <div id="micPulse" class="hidden w-5 h-5 relative">
+                            <span class="absolute inset-0 rounded-full bg-red-500 animate-ping opacity-50"></span>
+                            <span class="relative block w-5 h-5 rounded-full bg-red-500"></span>
+                        </div>
+                    </button>
+                    <textarea id="userInput" rows="2" placeholder="Type your answer... (Shift+Enter for new line)" class="flex-1 px-3 sm:px-4 py-2.5 sm:py-3 border border-surface-200 dark:border-surface-700 rounded-xl text-sm resize-none bg-white dark:bg-surface-800 dark:text-surface-100 focus:border-brand-500 transition" onkeydown="handleKeyDown(event)"></textarea>
+                    <button onclick="sendMessage()" id="sendBtn" class="px-4 sm:px-6 py-2.5 sm:py-3 bg-gradient-to-r from-brand-600 to-brand-500 hover:from-brand-700 hover:to-brand-600 text-white font-bold rounded-xl transition-all active:scale-[0.97] text-sm shadow-md disabled:opacity-50 disabled:cursor-not-allowed flex-shrink-0">
+                        Send →
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ==================== END SESSION CONFIRM MODAL ==================== -->
+    <div id="endConfirmModal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm px-4">
+        <div class="bg-white dark:bg-surface-900 rounded-2xl shadow-2xl max-w-sm w-full p-6 border border-surface-100 dark:border-surface-800 fade-in text-center">
+            <div class="text-4xl mb-3">🏁</div>
+            <h2 class="text-lg font-bold text-surface-800 dark:text-surface-100 mb-2">End This Session?</h2>
+            <p class="text-sm text-surface-500 mb-6">Gemma 4 will generate a comprehensive performance report with scores and a personalized study plan.</p>
+            <div class="flex gap-3">
+                <button onclick="closeEndConfirm()" class="flex-1 py-3 bg-surface-100 dark:bg-surface-800 hover:bg-surface-200 dark:hover:bg-surface-700 text-surface-700 dark:text-surface-300 font-semibold rounded-xl transition text-sm">Keep Going</button>
+                <button onclick="confirmEndSession()" id="confirmEndBtn" class="flex-1 py-3 bg-gradient-to-r from-brand-600 to-brand-500 text-white font-semibold rounded-xl transition hover:from-brand-700 hover:to-brand-600 text-sm">Get Report →</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ==================== RESULTS MODAL ==================== -->
+    <div id="resultsModal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm px-3 sm:px-4">
+        <div class="bg-white dark:bg-surface-900 rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto p-5 sm:p-8 border border-surface-100 dark:border-surface-800 fade-in">
+            <div class="text-center mb-6">
+                <div class="text-5xl mb-3">📊</div>
+                <h2 class="text-xl sm:text-2xl font-bold text-surface-800 dark:text-surface-100">Session Summary</h2>
+                <p class="text-xs text-surface-400 mt-1" id="resultsMeta"></p>
+            </div>
+            <div id="resultsContent" class="markdown-content text-surface-700 dark:text-surface-300 text-sm"></div>
+            <div class="flex flex-col sm:flex-row gap-2 sm:gap-3 mt-6 sm:mt-8">
+                <button onclick="downloadReport()" class="flex-1 py-3 bg-surface-100 dark:bg-surface-800 hover:bg-surface-200 dark:hover:bg-surface-700 text-surface-700 dark:text-surface-300 font-semibold rounded-xl transition text-sm flex items-center justify-center gap-2">
+                    📥 Download Report
+                </button>
+                <button onclick="newSession()" class="flex-1 py-3 bg-gradient-to-r from-brand-600 to-brand-500 text-white font-semibold rounded-xl transition hover:from-brand-700 hover:to-brand-600 text-sm">
+                    🔄 New Session
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ==================== HISTORY MODAL ==================== -->
+    <div id="historyModal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm px-3 sm:px-4">
+        <div class="bg-white dark:bg-surface-900 rounded-2xl shadow-2xl max-w-lg w-full max-h-[80vh] overflow-y-auto p-5 sm:p-6 border border-surface-100 dark:border-surface-800 fade-in">
+            <div class="flex items-center justify-between mb-4">
+                <h2 class="text-lg font-bold text-surface-800 dark:text-surface-100">📋 Past Sessions</h2>
+                <button onclick="closeHistory()" class="text-surface-400 hover:text-surface-600 transition text-xl p-1">✕</button>
+            </div>
+            <div id="historyList" class="space-y-2"></div>
+            <div id="historyEmpty" class="hidden text-center py-8 text-surface-400 text-sm">No past sessions yet. Complete a session to see it here.</div>
+        </div>
+    </div>
+
+<script>
+// ===== STATE =====
+let apiKey = '';
+let model = '';
+let conversationHistory = [];
+let questionNum = 0;
+let totalTokens = 0;
+let sessionConfig = {};
+let pendingImage = null;
+let selectedMode = 'behavioral';
+let apiProvider = 'google';
+let sessionStartTime = null;
+let timerInterval = null;
+let lastReportText = '';
+
+// ===== VOICE STATE =====
+let voiceMode = false;
+let isListening = false;
+let recognition = null;
+let speechSynth = window.speechSynthesis;
+
+// Initialize Speech Recognition
+const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+if (SpeechRecognition) {
+    recognition = new SpeechRecognition();
+    recognition.continuous = true;
+    recognition.interimResults = true;
+    recognition.lang = 'en-US';
+
+    recognition.onresult = (event) => {
+        let interimTranscript = '';
+        let finalTranscript = '';
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+            const transcript = event.results[i][0].transcript;
+            if (event.results[i].isFinal) finalTranscript += transcript;
+            else interimTranscript += transcript;
+        }
+        const input = document.getElementById('userInput');
+        if (finalTranscript) input.value = (input.value + ' ' + finalTranscript).trim();
+        if (interimTranscript) input.placeholder = interimTranscript + '...';
+    };
+
+    recognition.onend = () => {
+        if (isListening) { try { recognition.start(); } catch(e) {} }
+        else updateMicUI(false);
+    };
+
+    recognition.onerror = (event) => {
+        if (event.error !== 'no-speech' && event.error !== 'aborted') console.warn('Speech error:', event.error);
+        if (event.error === 'not-allowed') {
+            isListening = false;
+            updateMicUI(false);
+            alert('Microphone access denied. Please allow mic access in browser settings.');
+        }
+    };
+}
+
+function toggleMic() {
+    if (!recognition) { alert('Voice not supported in this browser. Try Chrome or Edge.'); return; }
+    isListening ? stopListening() : startListening();
+}
+
+function startListening() {
+    isListening = true;
+    document.getElementById('userInput').placeholder = 'Listening...';
+    updateMicUI(true);
+    try { recognition.start(); } catch(e) {}
+}
+
+function stopListening() {
+    isListening = false;
+    document.getElementById('userInput').placeholder = 'Type your answer... (Shift+Enter for new line)';
+    updateMicUI(false);
+    try { recognition.stop(); } catch(e) {}
+}
+
+function updateMicUI(active) {
+    const btn = document.getElementById('micBtn');
+    const icon = document.getElementById('micIcon');
+    const pulse = document.getElementById('micPulse');
+    if (active) {
+        btn.classList.remove('bg-white', 'dark:bg-surface-800', 'text-surface-500', 'dark:text-surface-400');
+        btn.classList.add('bg-red-50', 'dark:bg-red-500/10', 'border-red-300', 'dark:border-red-500/30', 'text-red-600');
+        icon.classList.add('hidden');
+        pulse.classList.remove('hidden');
+    } else {
+        btn.classList.add('bg-white', 'dark:bg-surface-800', 'text-surface-500', 'dark:text-surface-400');
+        btn.classList.remove('bg-red-50', 'dark:bg-red-500/10', 'border-red-300', 'dark:border-red-500/30', 'text-red-600');
+        icon.classList.remove('hidden');
+        pulse.classList.add('hidden');
+    }
+}
+
+function toggleVoiceMode() {
+    voiceMode = !voiceMode;
+    document.getElementById('voiceToggleLabel').textContent = voiceMode ? '🔊' : '🔇';
+    const btn = document.getElementById('voiceToggleBtn');
+    voiceMode ? btn.classList.add('bg-white/20') : btn.classList.remove('bg-white/20');
+    if (!voiceMode) speechSynth.cancel();
+}
+
+function speakText(text) {
+    if (!voiceMode || !speechSynth) return;
+    speechSynth.cancel();
+    const clean = text.replace(/#{1,6}\s/g, '').replace(/\*\*(.*?)\*\*/g, '$1').replace(/\*(.*?)\*/g, '$1').replace(/`(.*?)`/g, '$1').replace(/[🎯📊⚠️✅❌💡🔥📝🏆⭐📄📋🗣️💻🏗️]/gu, '').replace(/\n{2,}/g, '. ').trim();
+    if (!clean) return;
+    const utterance = new SpeechSynthesisUtterance(clean);
+    utterance.rate = 1.05;
+    utterance.pitch = 1;
+    const voices = speechSynth.getVoices();
+    const preferred = voices.find(v => v.name.includes('Google') && v.lang.startsWith('en')) ||
+                      voices.find(v => v.lang.startsWith('en-') && !v.localService) ||
+                      voices.find(v => v.lang.startsWith('en'));
+    if (preferred) utterance.voice = preferred;
+    speechSynth.speak(utterance);
+}
+
+// ===== TIMER =====
+function startTimer() {
+    sessionStartTime = Date.now();
+    timerInterval = setInterval(updateTimer, 1000);
+}
+
+function updateTimer() {
+    if (!sessionStartTime) return;
+    const elapsed = Math.floor((Date.now() - sessionStartTime) / 1000);
+    const mins = Math.floor(elapsed / 60).toString().padStart(2, '0');
+    const secs = (elapsed % 60).toString().padStart(2, '0');
+    document.getElementById('sessionTimer').textContent = `${mins}:${secs}`;
+}
+
+function stopTimer() {
+    clearInterval(timerInterval);
+    const el = document.getElementById('sessionTimer');
+    if (el) el.classList.remove('timer-active');
+}
+
+function getElapsedTime() {
+    if (!sessionStartTime) return '0m';
+    const elapsed = Math.floor((Date.now() - sessionStartTime) / 1000);
+    const mins = Math.floor(elapsed / 60);
+    const secs = elapsed % 60;
+    return mins > 0 ? `${mins}m ${secs}s` : `${secs}s`;
+}
+
+// ===== DARK MODE =====
+function toggleDarkMode() {
+    document.documentElement.classList.toggle('dark');
+    localStorage.setItem('darkMode', document.documentElement.classList.contains('dark'));
+}
+if (localStorage.getItem('darkMode') === 'true' || (!localStorage.getItem('darkMode') && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+    document.documentElement.classList.add('dark');
+}
+
+// ===== COLLAPSIBLE SECTIONS =====
+function toggleCollapsible(id) {
+    const section = document.getElementById(id);
+    section.classList.toggle('open');
+    const chevronId = id === 'jdSection' ? 'jdChevron' : 'resumeChevron';
+    const chevron = document.getElementById(chevronId);
+    chevron.style.transform = section.classList.contains('open') ? 'rotate(180deg)' : '';
+}
+
+// ===== MODE SELECTION =====
+function selectMode(el) {
+    document.querySelectorAll('.mode-card').forEach(c => {
+        c.classList.remove('selected');
+        c.classList.add('border-surface-200', 'dark:border-surface-700');
+        c.querySelector('.mode-inner').style.background = '';
+    });
+    el.classList.add('selected');
+    el.classList.remove('border-surface-200', 'dark:border-surface-700');
+    selectedMode = el.dataset.mode;
+}
+
+// ===== API KEY VISIBILITY =====
+function toggleKeyVisibility() {
+    const input = document.getElementById('apiKey');
+    input.type = input.type === 'password' ? 'text' : 'password';
+}
+
+// ===== API PROVIDERS =====
+const PROVIDERS = {
+    google: {
+        label: 'Google AI Studio API Key',
+        placeholder: 'AIzaSy...',
+        hint: 'Free at <a href="https://aistudio.google.com/apikey" target="_blank" class="text-brand-500 hover:underline">aistudio.google.com</a> — stays in your browser, never sent to any server.',
+        type: 'google'
+    },
+    openrouter: {
+        label: 'OpenRouter API Key',
+        placeholder: 'sk-or-...',
+        hint: 'Free tier at <a href="https://openrouter.ai/keys" target="_blank" class="text-brand-500 hover:underline">openrouter.ai</a> — Gemma 4 on free tier.',
+        type: 'openai',
+        baseUrl: 'https://openrouter.ai/api/v1/chat/completions',
+        models: { 'gemma-4-31b-it': 'google/gemma-4-31b-it:free', 'gemma-4-26b-a4b-it': 'google/gemma-4-26b-a4b-it:free' }
+    },
+    nvidia: {
+        label: 'NVIDIA NIM API Key',
+        placeholder: 'nvapi-...',
+        hint: 'Free at <a href="https://build.nvidia.com/explore/discover" target="_blank" class="text-brand-500 hover:underline">build.nvidia.com</a> — 1000 free credits on signup.',
+        type: 'openai',
+        baseUrl: 'https://integrate.api.nvidia.com/v1/chat/completions',
+        models: { 'gemma-4-31b-it': 'google/gemma-4-31b-it', 'gemma-4-26b-a4b-it': 'google/gemma-4-26b-a4b-it' }
+    },
+    huggingface: {
+        label: 'Hugging Face API Token',
+        placeholder: 'hf_...',
+        hint: 'Free at <a href="https://huggingface.co/settings/tokens" target="_blank" class="text-brand-500 hover:underline">huggingface.co</a> — Inference API free tier.',
+        type: 'openai',
+        baseUrl: 'https://router.huggingface.co/novita/v3/openai/chat/completions',
+        models: { 'gemma-4-31b-it': 'google/gemma-4-31b-it', 'gemma-4-26b-a4b-it': 'google/gemma-4-26b-a4b-it' }
+    }
+};
+
+function updateProviderUI() {
+    apiProvider = document.querySelector('input[name="provider"]:checked').value;
+    const cfg = PROVIDERS[apiProvider];
+    document.getElementById('apiKeyLabel').textContent = cfg.label;
+    document.getElementById('apiKey').placeholder = cfg.placeholder;
+    document.getElementById('apiKeyHint').innerHTML = cfg.hint;
+    document.getElementById('keyTestResult').classList.add('hidden');
+}
+
+async function testApiKey() {
+    const key = document.getElementById('apiKey').value.trim();
+    if (!key) { shakeElement(document.getElementById('apiKey')); return; }
+
+    const btn = document.getElementById('testKeyBtn');
+    const result = document.getElementById('keyTestResult');
+    btn.disabled = true;
+    btn.textContent = 'Testing...';
+    result.classList.add('hidden');
+
+    try {
+        let ok = false, errMsg = '';
+        const provider = document.querySelector('input[name="provider"]:checked').value;
+        const cfg = PROVIDERS[provider];
+
+        if (cfg.type === 'google') {
+            const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemma-4-31b-it:generateContent?key=${key}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ contents: [{ role: 'user', parts: [{ text: 'Say "ok" in one word.' }] }], generationConfig: { maxOutputTokens: 5 } })
+            });
+            const data = await res.json();
+            if (data.candidates) ok = true;
+            else if (data.error) errMsg = data.error.message || `Error ${data.error.code}`;
+        } else {
+            const testModel = cfg.models['gemma-4-31b-it'];
+            const res = await fetch(cfg.baseUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${key}` },
+                body: JSON.stringify({ model: testModel, messages: [{ role: 'user', content: 'Say "ok" in one word.' }], max_tokens: 5 })
+            });
+            const data = await res.json();
+            if (data.choices) ok = true;
+            else if (data.error) errMsg = data.error.message || 'Invalid key';
+        }
+
+        result.classList.remove('hidden');
+        result.innerHTML = ok
+            ? '<span class="text-green-600 dark:text-green-400">✅ API key works!</span>'
+            : `<span class="text-red-500">❌ ${errMsg || 'Failed — check your key'}</span>`;
+    } catch (e) {
+        result.classList.remove('hidden');
+        result.innerHTML = '<span class="text-red-500">❌ Network error</span>';
+    } finally {
+        btn.disabled = false;
+        btn.textContent = 'Test Key';
+    }
+}
+
+// ===== MARKDOWN RENDERER =====
+function renderMarkdown(text) {
+    return text
+        .replace(/```(\w*)\n([\s\S]*?)```/g, '<pre><code class="language-$1">$2</code></pre>')
+        .replace(/`([^`]+)`/g, '<code>$1</code>')
+        .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+        .replace(/\*(.+?)\*/g, '<em>$1</em>')
+        .replace(/^### (.+)$/gm, '<h3>$1</h3>')
+        .replace(/^## (.+)$/gm, '<h2>$1</h2>')
+        .replace(/^# (.+)$/gm, '<h1>$1</h1>')
+        .replace(/^> (.+)$/gm, '<blockquote>$1</blockquote>')
+        .replace(/^[*-] (.+)$/gm, '<li>$1</li>')
+        .replace(/^\d+\. (.+)$/gm, '<li>$1</li>')
+        .replace(/((?:<li>.*<\/li>\n?)+)/g, '<ul>$1</ul>')
+        .replace(/^(?!<[hupbl]|<li|<code|<pre|<blockquote)(.+)$/gm, '<p>$1</p>')
+        .replace(/\n{2,}/g, '\n');
+}
+
+// ===== IMAGE HANDLING =====
+function handleImageUpload(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = function(ev) {
+        const base64 = ev.target.result.split(',')[1];
+        pendingImage = { base64, mimeType: file.type, name: file.name };
+        document.getElementById('previewImg').src = ev.target.result;
+        document.getElementById('previewName').textContent = file.name;
+        document.getElementById('imagePreview').classList.remove('hidden');
+    };
+    reader.readAsDataURL(file);
+}
+
+function clearImage() {
+    pendingImage = null;
+    document.getElementById('imagePreview').classList.add('hidden');
+    document.getElementById('imageInput').value = '';
+}
+
+// ===== SESSION SETUP =====
+const modeNames = {
+    'behavioral': '🗣️ Behavioral Interview',
+    'technical': '💻 Technical Interview',
+    'system-design': '🏗️ System Design',
+    'assessment': '📝 Online Assessment',
+    'certification': '🏆 Certification Exam',
+    'case-study': '📊 Case Study'
+};
+
+function startSession() {
+    apiKey = document.getElementById('apiKey').value.trim();
+    if (!apiKey) { shakeElement(document.getElementById('apiKey')); return; }
+    const role = document.getElementById('targetRole').value.trim();
+    if (!role) { shakeElement(document.getElementById('targetRole')); return; }
+
+    apiProvider = document.querySelector('input[name="provider"]:checked').value;
+    model = document.querySelector('input[name="model"]:checked').value;
+    const levelEl = document.getElementById('experienceLevel');
+    const jd = document.getElementById('jobDescription')?.value.trim() || '';
+    const resume = document.getElementById('resumeText')?.value.trim() || '';
+
+    sessionConfig = {
+        mode: selectedMode,
+        modeName: modeNames[selectedMode],
+        role: role,
+        level: levelEl.value,
+        levelName: levelEl.selectedOptions[0].text,
+        jobDescription: jd,
+        resume: resume
+    };
+
+    document.getElementById('setupScreen').classList.add('hidden');
+    document.getElementById('chatScreen').classList.remove('hidden');
+    document.getElementById('sessionInfo').textContent = `${sessionConfig.modeName} · ${sessionConfig.role} · ${sessionConfig.levelName}`;
+
+    // Show context bar if JD or resume provided
+    const hasJD = jd.length > 0;
+    const hasResume = resume.length > 0;
+    if (hasJD || hasResume) {
+        document.getElementById('contextBar').classList.remove('hidden');
+        if (hasJD) document.getElementById('contextJD').classList.remove('hidden');
+        if (hasResume) document.getElementById('contextResume').classList.remove('hidden');
+    }
+
+    startTimer();
+
+    const systemPrompt = buildSystemPrompt();
+    conversationHistory = [{ role: 'user', parts: [{ text: systemPrompt }] }];
+    callGemma4(systemPrompt, true);
+}
+
+function shakeElement(el) {
+    el.style.animation = 'none';
+    el.offsetHeight;
+    el.style.animation = 'shake 0.5s ease';
+    el.style.borderColor = '#ef4444';
+    setTimeout(() => { el.style.borderColor = ''; el.style.animation = ''; }, 1000);
+}
+
+function buildSystemPrompt() {
+    const modes = {
+        'behavioral': `BEHAVIORAL INTERVIEW mode.
+- Ask STAR-method behavioral questions one at a time
+- After each answer, briefly evaluate (did they use STAR? specific enough? metrics?)
+- Probe deeper with follow-ups if vague
+- Cover: leadership, conflict, teamwork, failure, prioritization, communication`,
+        'technical': `TECHNICAL INTERVIEW mode.
+- Ask coding/technical questions one at a time, progressively harder
+- If they provide code, evaluate correctness, efficiency, edge cases
+- Ask follow-up optimization questions
+- Cover: data structures, algorithms, system knowledge, debugging, language-specific`,
+        'system-design': `SYSTEM DESIGN INTERVIEW mode.
+- Present a system design problem (Design Twitter, URL shortener, etc.)
+- Guide: requirements → high-level → deep dives → tradeoffs
+- Ask clarifying questions if they jump ahead
+- Evaluate: scalability, component choices, tradeoffs, capacity estimates`,
+        'assessment': `ONLINE ASSESSMENT SIMULATION mode.
+- Present timed-style problems: aptitude, logical reasoning, coding challenges
+- Give clear problem statements with examples and constraints
+- After each answer, show if correct and explain the solution
+- Mix: MCQ, short coding, logical puzzles, pattern recognition`,
+        'certification': `CERTIFICATION EXAM PRACTICE mode.
+- Ask realistic cert-style questions (MCQ + scenario-based)
+- After each answer, explain why correct AND why wrong options are wrong
+- Track running score
+- Reference official concepts and documentation`,
+        'case-study': `CASE STUDY INTERVIEW mode.
+- Present a business case or scenario
+- Guide: clarify → structure → analyze → recommend
+- Evaluate: structured thinking, quantitative reasoning, communication
+- Ask probing questions on assumptions and numbers`
+    };
+
+    let contextBlock = '';
+    if (sessionConfig.jobDescription) {
+        contextBlock += `\n\nJOB DESCRIPTION (tailor your questions to match this role's requirements):\n---\n${sessionConfig.jobDescription}\n---`;
+    }
+    if (sessionConfig.resume) {
+        contextBlock += `\n\nCANDIDATE'S RESUME/BACKGROUND (use this to personalize feedback — reference their actual experience when evaluating answers):\n---\n${sessionConfig.resume}\n---`;
+    }
+
+    return `You are an expert interview coach powered by Google Gemma 4. You adapt your coaching to the candidate's level and provide constructive, actionable feedback.
+
+SESSION CONFIGURATION:
+- Role: ${sessionConfig.role}
+- Experience: ${sessionConfig.levelName}
+- Mode: ${sessionConfig.modeName}
+${contextBlock}
+
+${modes[sessionConfig.mode]}
+
+COACHING RULES:
+1. Ask ONE question at a time. Wait for the candidate's response before continuing.
+2. After each answer, provide brief constructive feedback (2-4 sentences), then ask the next question.
+3. Calibrate difficulty to ${sessionConfig.levelName} level — don't ask junior questions to seniors or vice versa.
+4. Be encouraging but HONEST. Point out what was good AND what needs improvement. Don't sugarcoat.
+5. Use markdown formatting: **bold** key points, bullet lists, \`code\` for technical terms.
+6. Keep responses concise — this is practice, not a lecture.
+7. Number questions (Q1, Q2, etc.) for tracking.
+8. If the candidate uploads an image, analyze it and incorporate it into the discussion.
+9. If you notice patterns in their answers (e.g., always vague, lacks metrics), point it out.
+${sessionConfig.jobDescription ? '10. Reference specific requirements from the job description when crafting questions.' : ''}
+${sessionConfig.resume ? `${sessionConfig.jobDescription ? '11' : '10'}. Reference the candidate's actual experience from their resume when giving feedback. Help them leverage their specific background.` : ''}
+
+Begin now. Introduce yourself in 2 sentences${sessionConfig.jobDescription ? ', mention you\'ve reviewed the job description,' : ''} and ask Q1 immediately.`;
+}
+
+// ===== CHAT =====
+function addMessage(role, text, isThinking = false, imageUrl = null) {
+    const container = document.getElementById('chatMessages');
+    const div = document.createElement('div');
+    div.className = `flex ${role === 'user' ? 'justify-end' : 'justify-start'} fade-in`;
+
+    if (isThinking) {
+        div.id = 'thinkingIndicator';
+        div.innerHTML = `
+            <div class="msg-bubble bg-white dark:bg-surface-800 border border-surface-200 dark:border-surface-700 rounded-2xl rounded-bl-md px-4 sm:px-5 py-3 sm:py-4 shadow-sm">
+                <div class="flex items-center gap-2">
+                    <div class="thinking-dot w-2 h-2 sm:w-2.5 sm:h-2.5 bg-brand-500 rounded-full"></div>
+                    <div class="thinking-dot w-2 h-2 sm:w-2.5 sm:h-2.5 bg-brand-500 rounded-full"></div>
+                    <div class="thinking-dot w-2 h-2 sm:w-2.5 sm:h-2.5 bg-brand-500 rounded-full"></div>
+                    <span class="text-[10px] sm:text-xs text-surface-400 ml-1">Gemma 4 is thinking...</span>
+                </div>
+            </div>`;
+    } else if (role === 'user') {
+        const imgHtml = imageUrl ? `<img src="${imageUrl}" class="image-preview mb-2 border border-white/20">` : '';
+        div.innerHTML = `
+            <div class="msg-bubble bg-gradient-to-br from-brand-600 to-brand-500 text-white rounded-2xl rounded-br-md px-4 sm:px-5 py-2.5 sm:py-3 shadow-md">
+                ${imgHtml}
+                <div class="text-xs sm:text-sm whitespace-pre-wrap leading-relaxed">${escapeHtml(text)}</div>
+            </div>`;
+    } else {
+        div.innerHTML = `
+            <div class="msg-bubble bg-white dark:bg-surface-800 border border-surface-200 dark:border-surface-700 rounded-2xl rounded-bl-md px-4 sm:px-5 py-3 sm:py-4 shadow-sm">
+                <div class="flex items-center gap-2 mb-2 sm:mb-3">
+                    <div class="w-6 h-6 sm:w-7 sm:h-7 bg-gradient-to-br from-brand-500 to-purple-500 rounded-lg flex items-center justify-center text-white text-xs sm:text-sm">🎯</div>
+                    <span class="text-[10px] sm:text-xs font-bold text-surface-700 dark:text-surface-300">Interview Coach</span>
+                    <span class="text-[10px] sm:text-xs text-surface-400">· Gemma 4</span>
+                </div>
+                <div class="markdown-content text-xs sm:text-sm text-surface-700 dark:text-surface-300">${renderMarkdown(text)}</div>
+            </div>`;
+    }
+
+    container.appendChild(div);
+    container.scrollTop = container.scrollHeight;
+    return div;
+}
+
+function removeThinking() {
+    const el = document.getElementById('thinkingIndicator');
+    if (el) el.remove();
+}
+
+function escapeHtml(text) {
+    const d = document.createElement('div');
+    d.textContent = text;
+    return d.innerHTML;
+}
+
+async function callGemma4(userText, isSystem = false) {
+    const sendBtn = document.getElementById('sendBtn');
+    sendBtn.disabled = true;
+    addMessage('coach', '', true);
+
+    if (!isSystem) {
+        const parts = [];
+        if (pendingImage) {
+            parts.push({ inlineData: { mimeType: pendingImage.mimeType, data: pendingImage.base64 } });
+            parts.push({ text: userText || "Please analyze this image in the context of our interview session." });
+            clearImage();
+        } else {
+            parts.push({ text: userText });
+        }
+        conversationHistory.push({ role: 'user', parts });
+    }
+
+    try {
+        let textParts = '';
+        let usage = {};
+
+        const providerCfg = PROVIDERS[apiProvider];
+        if (providerCfg.type === 'openai') {
+            const messages = [];
+            for (const msg of conversationHistory) {
+                const role = msg.role === 'model' ? 'assistant' : 'user';
+                const content = msg.parts.map(p => {
+                    if (p.inlineData) return { type: 'image_url', image_url: { url: `data:${p.inlineData.mimeType};base64,${p.inlineData.data}` } };
+                    return { type: 'text', text: p.text };
+                });
+                messages.push({ role, content });
+            }
+            const oaiModel = providerCfg.models[model] || providerCfg.models['gemma-4-31b-it'];
+            let oaiData = null;
+            for (let attempt = 0; attempt < 3; attempt++) {
+                const res = await fetch(providerCfg.baseUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
+                    body: JSON.stringify({ model: oaiModel, messages, temperature: 0.75, max_tokens: 2048, top_p: 0.95 })
+                });
+                oaiData = await res.json();
+                if (!oaiData.error || (oaiData.error.code !== 503 && oaiData.error.code !== 500) || attempt === 2) break;
+                await new Promise(r => setTimeout(r, 1500 * (attempt + 1)));
+            }
+            removeThinking();
+            if (oaiData.error) {
+                addMessage('coach', `⚠️ ${apiProvider.charAt(0).toUpperCase() + apiProvider.slice(1)} Error: ${oaiData.error.message || JSON.stringify(oaiData.error)}`);
+                sendBtn.disabled = false; return;
+            }
+            textParts = oaiData.choices?.[0]?.message?.content || '';
+            usage = { totalTokenCount: oaiData.usage?.total_tokens || 0 };
+        } else {
+            let data = null;
+            for (let attempt = 0; attempt < 3; attempt++) {
+                const response = await fetch(
+                    `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
+                    {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            contents: conversationHistory,
+                            generationConfig: { temperature: 0.75, maxOutputTokens: 2048, topP: 0.95, topK: 40 }
+                        })
+                    }
+                );
+                data = await response.json();
+                if (!data.error || (data.error.code !== 500 && data.error.code !== 503) || attempt === 2) break;
+                await new Promise(r => setTimeout(r, 1500 * (attempt + 1)));
+            }
+            removeThinking();
+            if (data.error) {
+                const errMsg = data.error.code === 429
+                    ? '⚠️ Rate limit hit. Wait a moment and try again, or use a different API key.'
+                    : (data.error.code === 500 || data.error.code === 503)
+                    ? '⚠️ Google API is temporarily overloaded. Try switching to OpenRouter or wait a moment and retry.'
+                    : `⚠️ API Error (${data.error.code}): ${data.error.message}`;
+                addMessage('coach', errMsg);
+                sendBtn.disabled = false; return;
+            }
+            const parts = data.candidates?.[0]?.content?.parts || [];
+            textParts = parts.filter(p => !p.thought).map(p => p.text).join('');
+            usage = data.usageMetadata || {};
+        }
+
+        if (!textParts) {
+            addMessage('coach', '⚠️ Empty response. Try rephrasing or switching models.');
+            sendBtn.disabled = false; return;
+        }
+
+        conversationHistory.push({ role: 'model', parts: [{ text: textParts }] });
+        totalTokens += (usage.totalTokenCount || 0);
+        if (/Q\d+|question\s*\d+/i.test(textParts)) questionNum++;
+        updateStats();
+        addMessage('coach', textParts);
+        speakText(textParts);
+    } catch (err) {
+        removeThinking();
+        addMessage('coach', `⚠️ Network error: ${err.message}`);
+    } finally {
+        sendBtn.disabled = false;
+        document.getElementById('userInput').focus();
+    }
+}
+
+function sendMessage() {
+    if (isListening) stopListening();
+    speechSynth.cancel();
+    const input = document.getElementById('userInput');
+    const text = input.value.trim();
+    if (!text && !pendingImage) return;
+
+    const imageUrl = pendingImage ? `data:${pendingImage.mimeType};base64,${pendingImage.base64}` : null;
+    addMessage('user', text || '📸 [Image uploaded]', false, imageUrl);
+    input.value = '';
+    input.style.height = 'auto';
+    callGemma4(text);
+}
+
+function handleKeyDown(e) {
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
+}
+
+function requestFeedback() {
+    const prompt = `PAUSE: The candidate wants a mid-session performance review.
+
+Provide a detailed scorecard in this exact format:
+
+## 📊 Mid-Session Scorecard (${getElapsedTime()} elapsed, ${questionNum} questions)
+
+### Scores (each out of 10)
+1. **Communication Clarity** — [score]/10 — [1-line reason]
+2. **Technical Depth** — [score]/10 — [1-line reason]
+3. **Problem-Solving** — [score]/10 — [1-line reason]
+4. **Self-Awareness** — [score]/10 — [1-line reason]
+5. **Interview Readiness** — [score]/10 — [1-line reason]
+
+### 🟢 Top Strengths
+- [strength 1]
+- [strength 2]
+- [strength 3]
+
+### 🔴 Priority Improvements
+- [improvement 1 — specific + actionable]
+- [improvement 2 — specific + actionable]
+- [improvement 3 — specific + actionable]
+
+### Overall: [X]/50 — [one-sentence verdict]
+
+Be encouraging but brutally honest. Then continue the interview with the next question.`;
+
+    addMessage('user', '📊 Requesting performance score...');
+    callGemma4(prompt);
+}
+
+function updateStats() {
+    document.getElementById('questionCount').textContent = `Q: ${questionNum}`;
+    document.getElementById('tokenCount').textContent = `${totalTokens.toLocaleString()} tok`;
+}
+
+// ===== END SESSION (proper modal flow) =====
+function showEndConfirm() {
+    document.getElementById('endConfirmModal').classList.remove('hidden');
+}
+
+function closeEndConfirm() {
+    document.getElementById('endConfirmModal').classList.add('hidden');
+}
+
+function confirmEndSession() {
+    const btn = document.getElementById('confirmEndBtn');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="inline-flex items-center gap-2"><span class="thinking-dot w-1.5 h-1.5 bg-white rounded-full inline-block"></span><span class="thinking-dot w-1.5 h-1.5 bg-white rounded-full inline-block"></span><span class="thinking-dot w-1.5 h-1.5 bg-white rounded-full inline-block"></span> Generating...</span>';
+    closeEndConfirm();
+
+    if (isListening) stopListening();
+    speechSynth.cancel();
+    stopTimer();
+
+    const elapsed = getElapsedTime();
+    const endPrompt = `SESSION ENDING. The candidate has completed ${questionNum} questions over ${elapsed}.
+
+Provide a comprehensive final report:
+
+## 🏁 Final Performance Report
+
+**Session:** ${sessionConfig.modeName} · ${sessionConfig.role} · ${sessionConfig.levelName}
+**Duration:** ${elapsed} · **Questions:** ${questionNum}
+${sessionConfig.jobDescription ? '**Job Description:** Reviewed and incorporated' : ''}
+${sessionConfig.resume ? '**Resume:** Reviewed and incorporated' : ''}
+
+### Overall Score: [X]/100
+
+### Performance Breakdown
+| Dimension | Score | Notes |
+|-----------|-------|-------|
+| Communication | /20 | |
+| Technical Knowledge | /20 | |
+| Problem-Solving | /20 | |
+| Professionalism | /20 | |
+| Interview Readiness | /20 | |
+
+### 🟢 Key Strengths
+- [with specific examples from this session]
+
+### 🔴 Critical Improvements
+- [specific + actionable, with examples from this session]
+
+### 📅 7-Day Study Plan
+1. **Day 1-2:** [specific action]
+2. **Day 3-4:** [specific action]
+3. **Day 5-7:** [specific action]
+
+### Verdict: [Ready / Almost Ready / Needs More Practice]
+
+### 💪 Final Note
+[Honest, motivational closing that references their specific performance]`;
+
+    addMessage('user', '🏁 Ending session — requesting final report...');
+    callGemma4(endPrompt).then(() => {
+        saveSession();
+        setTimeout(() => {
+            const msgs = document.querySelectorAll('.markdown-content');
+            const last = msgs[msgs.length - 1];
+            if (last) {
+                lastReportText = last.textContent;
+                document.getElementById('resultsContent').innerHTML = last.innerHTML;
+                document.getElementById('resultsMeta').textContent = `${sessionConfig.modeName} · ${sessionConfig.role} · ${elapsed} · ${questionNum} questions`;
+                document.getElementById('resultsModal').classList.remove('hidden');
+            }
+            // Reset button
+            const endBtn = document.getElementById('confirmEndBtn');
+            if (endBtn) { endBtn.disabled = false; endBtn.textContent = 'Get Report →'; }
+        }, 1500);
+    });
+}
+
+// ===== DOWNLOAD REPORT =====
+function downloadReport() {
+    const reportText = lastReportText || document.getElementById('resultsContent')?.textContent || 'No report available';
+    const header = `Interview Coach — Session Report
+${'='.repeat(40)}
+Mode: ${sessionConfig.modeName}
+Role: ${sessionConfig.role}
+Level: ${sessionConfig.levelName}
+Date: ${new Date().toLocaleDateString()}
+Duration: ${getElapsedTime()}
+Questions: ${questionNum}
+${'='.repeat(40)}
+
+`;
+    const blob = new Blob([header + reportText], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `interview-report-${new Date().toISOString().slice(0, 10)}.txt`;
+    a.click();
+    URL.revokeObjectURL(url);
+}
+
+// ===== SESSION HISTORY =====
+function saveSession() {
+    const sessions = JSON.parse(localStorage.getItem('interviewCoachSessions') || '[]');
+    sessions.unshift({
+        id: Date.now(),
+        date: new Date().toLocaleDateString(),
+        mode: sessionConfig.modeName,
+        role: sessionConfig.role,
+        level: sessionConfig.levelName,
+        questions: questionNum,
+        tokens: totalTokens,
+        model: model,
+        duration: getElapsedTime()
+    });
+    if (sessions.length > 20) sessions.length = 20;
+    localStorage.setItem('interviewCoachSessions', JSON.stringify(sessions));
+}
+
+function viewHistory() {
+    const sessions = JSON.parse(localStorage.getItem('interviewCoachSessions') || '[]');
+    const list = document.getElementById('historyList');
+    const empty = document.getElementById('historyEmpty');
+
+    if (sessions.length === 0) {
+        list.innerHTML = '';
+        empty.classList.remove('hidden');
+    } else {
+        empty.classList.add('hidden');
+        list.innerHTML = sessions.map(s => `
+            <div class="p-3 bg-surface-50 dark:bg-surface-800 rounded-xl border border-surface-200 dark:border-surface-700">
+                <div class="flex items-center justify-between">
+                    <span class="text-sm font-semibold text-surface-800 dark:text-surface-200">${s.mode}</span>
+                    <span class="text-xs text-surface-400">${s.date}</span>
+                </div>
+                <div class="text-xs text-surface-500 mt-1">${s.role} · ${s.level} · ${s.questions} Q${s.duration ? ' · ' + s.duration : ''} · ${s.tokens?.toLocaleString() || '?'} tokens</div>
+            </div>
+        `).join('');
+    }
+    document.getElementById('historyModal').classList.remove('hidden');
+}
+
+function closeHistory() { document.getElementById('historyModal').classList.add('hidden'); }
+function closeResults() { document.getElementById('resultsModal').classList.add('hidden'); }
+
+function newSession() {
+    document.getElementById('resultsModal').classList.add('hidden');
+    document.getElementById('chatScreen').classList.add('hidden');
+    document.getElementById('setupScreen').classList.remove('hidden');
+    document.getElementById('chatMessages').innerHTML = '';
+    document.getElementById('contextBar').classList.add('hidden');
+    document.getElementById('contextJD').classList.add('hidden');
+    document.getElementById('contextResume').classList.add('hidden');
+    conversationHistory = [];
+    questionNum = 0;
+    totalTokens = 0;
+    sessionStartTime = null;
+    clearInterval(timerInterval);
+    document.getElementById('sessionTimer').textContent = '00:00';
+}
+
+// Auto-resize textarea
+document.addEventListener('DOMContentLoaded', () => {
+    const ta = document.getElementById('userInput');
+    if (ta) ta.addEventListener('input', function() {
+        this.style.height = 'auto';
+        this.style.height = Math.min(this.scrollHeight, 150) + 'px';
+    });
+    // Restore API key from localStorage
+    const savedKey = localStorage.getItem('interview_coach_api_key');
+    if (savedKey) document.getElementById('apiKey').value = savedKey;
+});
+
+// Save API key to localStorage when session starts
+const originalStartSession = startSession;
+startSession = function() {
+    const key = document.getElementById('apiKey').value.trim();
+    if (key) localStorage.setItem('interview_coach_api_key', key);
+    originalStartSession();
+};
+</script>
+
+</body>
+</html>
