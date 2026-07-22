@@ -1,6 +1,7 @@
 import logging
 import re
 import random
+import threading
 from typing import List, Dict, Optional
 import numpy as np
 
@@ -13,18 +14,33 @@ logger = logging.getLogger(__name__)
 class SBERTSingleton:
     """Loads the SBERT model exactly once and reuses it globally."""
     _instance: Optional["SBERTSingleton"] = None
-    _model: Optional[SentenceTransformer] = None
+    _lock: threading.Lock = threading.Lock()
 
     def __new__(cls):
         if cls._instance is None:
-            cls._instance = super().__new__(cls)
-            logger.info("[INFO] Loading SBERT model (all-MiniLM-L6-v2) …")
-            cls._model = SentenceTransformer("all-MiniLM-L6-v2")
-            logger.info("[SUCCESS] SBERT model loaded.")
+            with cls._lock:
+                # Double-check locking pattern
+                if cls._instance is None:
+                    instance = super().__new__(cls)
+                    logger.info("[INFO] Loading SBERT model (all-MiniLM-L6-v2) …")
+                    try:
+                        # Disable HuggingFace tqdm progress bars which cause OSError 22 on Windows sys.stderr.flush()
+                        from transformers.utils import logging as hf_logging
+                        hf_logging.disable_progress_bar()
+                        
+                        instance._model = SentenceTransformer("all-MiniLM-L6-v2")
+                        logger.info("[SUCCESS] SBERT model loaded.")
+                        cls._instance = instance
+                    except Exception as e:
+                        logger.error(f"[ERROR] Failed to load SBERT model: {e}")
+                        raise e
         return cls._instance
 
+
     def encode(self, texts: List[str]) -> np.ndarray:
-        return self._model.encode(texts, convert_to_numpy=True)
+        if getattr(self, "_model", None) is None:
+            raise RuntimeError("SBERT model is not loaded correctly.")
+        return self._model.encode(texts, convert_to_numpy=True, show_progress_bar=False)
 
 class GeminiQGSingleton:
     """Uses Google Gemini API for highly accurate, dynamic question formulation."""
@@ -74,7 +90,7 @@ class GeminiQGSingleton:
         for attempt in range(max_retries):
             try:
                 response = self._client.models.generate_content(
-                    model='gemini-2.5-flash',
+                    model='gemini-3.7-flash',
                     contents=prompt
                 )
                 raw_text = response.text.strip()

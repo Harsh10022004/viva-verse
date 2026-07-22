@@ -4,6 +4,11 @@ import urllib.request
 import urllib.error
 from typing import List, Dict, Any, Optional
 
+from app.services.chunking_engine import estimate_tokens
+from app.services.llm_service import SBERTSingleton
+from sklearn.metrics.pairwise import cosine_similarity
+import numpy as np
+
 logger = logging.getLogger(__name__)
 
 PROVIDERS_CONFIG = {
@@ -11,7 +16,7 @@ PROVIDERS_CONFIG = {
         "name": "Google AI Studio",
         "type": "google",
         "base_url": "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key}",
-        "default_model": "gemini-2.5-flash"
+        "default_model": "gemini-2.5-flash" 
     },
     "openrouter": {
         "name": "OpenRouter",
@@ -71,14 +76,31 @@ MODE_PROMPTS = {
 - Ask probing stress-test questions regarding customer acquisition costs and margin assumptions."""
 }
 
+def _build_rag_context(jd: str, resume: str) -> str:
+    """
+    RAG Alignment: If both JD and Resume are provided and are very large,
+    we could chunk them. For now, since they are single documents, we
+    just concatenate them with clear boundaries. If they exceed token limits,
+    we truncate them cleanly.
+    """
+    context_block = ""
+    
+    from app.services.parser_service import get_optimal_rag_context
+    
+    if jd and jd.strip():
+        jd_clean = get_optimal_rag_context(jd.strip(), num_clusters=3)
+        context_block += f"\n\nTARGET JOB DESCRIPTION (Tailor your interrogation questions strictly to evaluate these specific competencies):\n---\n{jd_clean}\n---"
+        
+    if resume and resume.strip():
+        res_clean = get_optimal_rag_context(resume.strip(), num_clusters=5)
+        context_block += f"\n\nCANDIDATE RESUME & BACKGROUND (Cross-examine their actual past projects and metrics when providing feedback):\n---\n{res_clean}\n---"
+        
+    return context_block
+
 def build_system_prompt(mode: str, role: str, level: str, jd: Optional[str] = None, resume: Optional[str] = None) -> str:
     mode_instruction = MODE_PROMPTS.get(mode, MODE_PROMPTS["technical"])
     
-    context_block = ""
-    if jd and jd.strip():
-        context_block += f"\n\nTARGET JOB DESCRIPTION (Tailor your interrogation questions strictly to evaluate these specific competencies):\n---\n{jd.strip()}\n---"
-    if resume and resume.strip():
-        context_block += f"\n\nCANDIDATE RESUME & BACKGROUND (Cross-examine their actual past projects and metrics when providing feedback):\n---\n{resume.strip()}\n---"
+    context_block = _build_rag_context(jd or "", resume or "")
 
     return f"""You are Antigravity Viva-Verse, an elite industry AI Interviewer & Defense Coach powered by Google Gemma 4 architecture. You conduct production-grade, brutally honest interviews calibrated to industry hiring bars.
 
@@ -100,6 +122,30 @@ PRODUCTION COACHING PROTOCOL:
 7. If the candidate uploads an architectural sketch or screenshot, perform multi-modal analysis and integrate it directly into the cross-examination.
 
 Begin immediately. Introduce your executive persona in 2 classy sentences and pose **Q1**."""
+
+def build_batch_question_prompt(mode: str, role: str, level: str, num_questions: int, jd: Optional[str] = None, resume: Optional[str] = None) -> str:
+    mode_instruction = MODE_PROMPTS.get(mode, MODE_PROMPTS["technical"])
+    context_block = _build_rag_context(jd or "", resume or "")
+
+    return f"""You are Antigravity Viva-Verse, an elite industry AI Interviewer.
+SESSION METADATA:
+- Target Role: {role}
+- Experience Bar: {level}
+- Active Arena: Viva-Verse for {mode.replace('-', ' ').title()}
+{context_block}
+
+{mode_instruction}
+
+PRODUCTION COACHING PROTOCOL:
+Generate exactly {num_questions} interview questions based on the mode, context, and role.
+You MUST output ONLY a valid JSON array of strings, where each string is a question.
+Example:
+[
+  "Can you describe a time you failed?",
+  "How would you design a rate limiter?"
+]
+
+DO NOT include markdown formatting like ```json. Output raw JSON only."""
 
 def test_api_key_sync(provider: str, api_key: str, model: Optional[str] = None) -> Dict[str, Any]:
     """Synchronously ping the provider to verify if the API key is active."""
@@ -167,23 +213,17 @@ def call_llm_sync(provider: str, api_key: str, messages: List[Dict[str, Any]], m
             if gemini_contents and gemini_contents[0]["role"] == "model":
                 gemini_contents.insert(0, {"role": "user", "parts": [{"text": "Begin interview session."}]})
 
-            req_body = {
+            payload_dict = {
                 "contents": gemini_contents,
-                "generationConfig": {"temperature": 0.75, "maxOutputTokens": 2048, "topP": 0.95}
+                "generationConfig": {
+                    "temperature": 0.3
+                }
             }
-            if system_prompt and system_prompt.strip():
-                req_body["system_instruction"] = {"parts": [{"text": system_prompt.strip()}]}
+            if system_prompt:
+                payload_dict["systemInstruction"] = {"role": "user", "parts": [{"text": system_prompt}]}
 
-            payload = json.dumps(req_body).encode("utf-8")
+            payload = json.dumps(payload_dict).encode("utf-8")
             req = urllib.request.Request(url, data=payload, headers={"Content-Type": "application/json"}, method="POST")
-
-            with urllib.request.urlopen(req, timeout=30) as resp:
-                data = json.loads(resp.read().decode("utf-8"))
-                c_parts = data.get("candidates", [{}])[0].get("content", {}).get("parts", [])
-                text = "".join([p.get("text", "") for p in c_parts if not p.get("thought")])
-                tokens = data.get("usageMetadata", {}).get("totalTokenCount", 0)
-                return {"status": "success", "content": text, "tokens": tokens}
-
         else:
             url = cfg["base_url"]
             # Format messages for OpenAI Chat Completions REST API
@@ -219,16 +259,21 @@ def call_llm_sync(provider: str, api_key: str, messages: List[Dict[str, Any]], m
                 "Authorization": f"Bearer {api_key}"
             }, method="POST")
 
-            with urllib.request.urlopen(req, timeout=30) as resp:
-                data = json.loads(resp.read().decode("utf-8"))
-                text = data.get("choices", [{}])[0].get("message", {}).get("content", "")
-                tokens = data.get("usage", {}).get("total_tokens", 0)
-                return {"status": "success", "content": text, "tokens": tokens}
+        with urllib.request.urlopen(req, timeout=120) as response:
+            data = json.loads(response.read().decode("utf-8"))
+            if cfg["type"] == "google":
+                candidates = data.get("candidates", [])
+                if not candidates:
+                    raise Exception("No content generated")
+                text = "".join(p.get("text", "") for p in candidates[0]["content"]["parts"])
+                return {"status": "success", "content": text}
+            else:
+                return {"status": "success", "content": data["choices"][0]["message"]["content"]}
 
     except urllib.error.HTTPError as e:
         err_body = e.read().decode("utf-8", errors="ignore")
-        logger.error(f"[LLM EXECUTION ERROR {e.code}] {provider}: {err_body}")
-        return {"status": "error", "message": f"Provider API Error ({e.code}): {err_body[:200]}"}
+        logger.error(f"[LLM ERROR {e.code}] {provider}: {err_body}")
+        return {"status": "error", "message": f"{cfg['name']} API Error (HTTP {e.code})"}
     except Exception as e:
         logger.error(f"[LLM EXECUTION ERROR]: {str(e)}")
         return {"status": "error", "message": f"Inference failure: {str(e)}"}
