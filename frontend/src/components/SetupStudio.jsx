@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import axios from 'axios'
 
-export default function SetupStudio({ apiBase, token, user, onStartCoach, onStartDocumentDefense, addToast }) {
+export default function SetupStudio({ apiBase, token, user, onStartCoach, addToast }) {
     const [provider, setProvider] = useState('google')
     const [apiKey, setApiKey] = useState('')
     const [selectedMode, setSelectedMode] = useState('behavioral')
@@ -9,10 +9,38 @@ export default function SetupStudio({ apiBase, token, user, onStartCoach, onStar
     const [expLevel, setExpLevel] = useState('Entry-level (0-2 yrs)')
     const [jobDesc, setJobDesc] = useState('')
     const [resumeText, setResumeText] = useState('')
+    const [numQuestions, setNumQuestions] = useState(5)
     const [testingKey, setTestingKey] = useState(false)
     const [keyStatus, setKeyStatus] = useState(null) // {ok: boolean, msg: string}
     const [starting, setStarting] = useState(false)
     const [showContext, setShowContext] = useState(false)
+    const [uploading, setUploading] = useState(false)
+
+    const handleFileUpload = async (e) => {
+        const file = e.target.files?.[0]
+        if (!file) return
+        
+        const formData = new FormData()
+        formData.append('file', file)
+        
+        setUploading(true)
+        addToast('Extracting document text...', 'info')
+        try {
+            const res = await axios.post(`${apiBase}/coach/parse-resume`, formData, {
+                headers: { 
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'multipart/form-data'
+                }
+            })
+            setResumeText(res.data.text)
+            addToast('Resume uploaded & parsed successfully', 'success')
+        } catch (err) {
+            addToast(err.response?.data?.detail || 'Failed to parse document', 'error')
+        } finally {
+            setUploading(false)
+            e.target.value = '' // reset input
+        }
+    }
 
     useEffect(() => {
         const savedKey = localStorage.getItem('viva_byok_api_key')
@@ -32,8 +60,7 @@ export default function SetupStudio({ apiBase, token, user, onStartCoach, onStar
         { id: 'system-design', title: 'Viva-Verse for System Design', icon: '🏗️', tag: 'Distributed Scalability & Tradeoffs' },
         { id: 'assessment', title: 'Viva-Verse for Online Assessment', icon: '📝', tag: 'Timed Aptitude & Logical Deduction' },
         { id: 'certification', title: 'Viva-Verse for Certification', icon: '🏆', tag: 'MCQ Practice & Decoupled Option Analysis' },
-        { id: 'case-study', title: 'Viva-Verse for Case Study', icon: '📊', tag: 'MECE Business Structuring & Mental Math' },
-        { id: 'document-defense', title: 'Viva-Verse for Document Defense', icon: '📚', tag: 'Flagship Space-Bound Multi-PDF Defense', isFlagship: true }
+        { id: 'case-study', title: 'Viva-Verse for Case Study', icon: '📊', tag: 'MECE Business Structuring & Mental Math' }
     ]
 
     const LEVELS = [
@@ -73,7 +100,7 @@ export default function SetupStudio({ apiBase, token, user, onStartCoach, onStar
             addToast('Industry BYOK Protocol: API Key is required', 'warning')
             return
         }
-        if (selectedMode !== 'document-defense' && !targetRole.trim()) {
+        if (!targetRole.trim()) {
             addToast('Please specify your Target Role', 'warning')
             return
         }
@@ -88,26 +115,23 @@ export default function SetupStudio({ apiBase, token, user, onStartCoach, onStar
             role: targetRole.trim() || 'Thesis Candidate',
             level: expLevel,
             jd: jobDesc.trim(),
-            resume: resumeText.trim()
+            resume: resumeText.trim(),
+            num_questions: numQuestions
         }
 
-        if (selectedMode === 'document-defense') {
-            onStartDocumentDefense(config)
-        } else {
-            try {
-                const res = await axios.post(`${apiBase}/coach/init`, config, {
-                    headers: { Authorization: `Bearer ${token}` }
-                })
-                onStartCoach({
-                    ...config,
-                    system_prompt: res.data.system_prompt,
-                    initial_message: res.data.initial_message,
-                    initial_tokens: res.data.tokens
-                })
-            } catch (err) {
-                addToast(err.response?.data?.detail || 'Failed to initialize arena', 'error')
-                setStarting(false)
-            }
+        try {
+            const res = await axios.post(`${apiBase}/coach/init`, config, {
+                headers: { Authorization: `Bearer ${token}` }
+            })
+            onStartCoach({
+                ...config,
+                system_prompt: res.data.system_prompt,
+                questions: res.data.questions,
+                initial_tokens: res.data.tokens
+            })
+        } catch (err) {
+            addToast(err.response?.data?.detail || 'Failed to initialize arena', 'error')
+            setStarting(false)
         }
     }
 
@@ -214,6 +238,18 @@ export default function SetupStudio({ apiBase, token, user, onStartCoach, onStar
                                 </select>
                             </div>
 
+                            <div>
+                                <label className="text-xs font-medium text-zinc-400 block mb-1.5">Number of Questions ({numQuestions})</label>
+                                <input
+                                    type="range"
+                                    min="1"
+                                    max="15"
+                                    value={numQuestions}
+                                    onChange={e => setNumQuestions(Number(e.target.value))}
+                                    className="w-full accent-brand-500"
+                                />
+                            </div>
+
                             {showContext && (
                                 <div className="space-y-4 pt-3 border-t border-white/10 fade-in-up">
                                     <div>
@@ -227,13 +263,20 @@ export default function SetupStudio({ apiBase, token, user, onStartCoach, onStar
                                         />
                                     </div>
                                     <div>
-                                        <label className="text-xs font-medium text-zinc-400 block mb-1.5">Candidate Resume Summary (Optional)</label>
+                                        <div className="flex items-center justify-between mb-1.5">
+                                            <label className="text-xs font-medium text-zinc-400 block">Candidate Resume (Optional)</label>
+                                            <label className="text-xs text-brand-400 hover:text-brand-300 cursor-pointer flex items-center gap-1 transition-colors">
+                                                {uploading ? '⏳ Extracting...' : '📎 Upload Full PDF/TXT'}
+                                                <input type="file" className="hidden" accept=".pdf,.txt" onChange={handleFileUpload} disabled={uploading} />
+                                            </label>
+                                        </div>
                                         <textarea
                                             value={resumeText}
                                             onChange={e => setResumeText(e.target.value)}
                                             rows={3}
-                                            placeholder="Paste your resume experience for tailored cross-examination..."
+                                            placeholder="Paste your resume experience or upload a file for tailored cross-examination..."
                                             className="w-full bg-black/60 border border-white/10 rounded-xl p-3 text-xs text-white placeholder-zinc-600 focus:outline-none focus:border-brand-500 transition-colors resize-none"
+                                            disabled={uploading}
                                         />
                                     </div>
                                 </div>
@@ -246,7 +289,7 @@ export default function SetupStudio({ apiBase, token, user, onStartCoach, onStar
                 <div className="lg:col-span-7 space-y-6">
                     <h2 className="text-xl font-bold text-white flex items-center justify-between">
                         <span>⚡ Select Active Interrogation Mode</span>
-                        <span className="text-xs px-3 py-1 rounded-full bg-zinc-800 text-zinc-300 border border-white/5">7 Specialized Arenas</span>
+                        <span className="text-xs px-3 py-1 rounded-full bg-zinc-800 text-zinc-300 border border-white/5">6 Specialized Arenas</span>
                     </h2>
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

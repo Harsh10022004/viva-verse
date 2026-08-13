@@ -4,21 +4,21 @@ import axios from 'axios'
 const SpeechRecognition = typeof window !== 'undefined' && (window.SpeechRecognition || window.webkitSpeechRecognition)
 const voiceSupported = !!SpeechRecognition
 
-export default function CoachTerminal({ apiBase, token, config, onExit, addToast }) {
-    const [messages, setMessages] = useState([
-        { role: 'coach', content: config.initial_message }
-    ])
+export default function CoachTerminal({ apiBase, token, config, onExit, onComplete, addToast }) {
+    const questions = config.questions || []
+    
+    const [currentQIndex, setCurrentQIndex] = useState(0)
+    const [messages, setMessages] = useState(
+        questions.length > 0 ? [{ role: 'coach', content: questions[0] }] : []
+    )
+    const [qaPairs, setQaPairs] = useState([])
     const [input, setInput] = useState('')
-    const [thinking, setThinking] = useState(false)
+    const [evaluating, setEvaluating] = useState(false)
     const [tokens, setTokens] = useState(config.initial_tokens || 0)
-    const [questionNum, setQuestionNum] = useState(1)
     const [elapsedSeconds, setElapsedSeconds] = useState(0)
     const [ttsEnabled, setTtsEnabled] = useState(true)
     const [isListening, setIsListening] = useState(false)
-    const [attachedImage, setAttachedImage] = useState(null) // {base64, mimeType, previewUrl}
-    const [scorecardModal, setScorecardModal] = useState(null)
-    const [finalReportModal, setFinalReportModal] = useState(null)
-    const [evaluating, setEvaluating] = useState(false)
+    const [attachedImage, setAttachedImage] = useState(null)
 
     const recognitionRef = useRef(null)
     const chatEndRef = useRef(null)
@@ -38,14 +38,14 @@ export default function CoachTerminal({ apiBase, token, config, onExit, addToast
     // Auto scroll chat
     useEffect(() => {
         chatEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-    }, [messages, thinking])
+    }, [messages, evaluating])
 
-    // Speak initial message
+    // Speak current question
     useEffect(() => {
-        if (ttsEnabled && config.initial_message) {
-            speakText(config.initial_message)
+        if (ttsEnabled && questions[currentQIndex]) {
+            speakText(questions[currentQIndex])
         }
-    }, [])
+    }, [currentQIndex])
 
     const speakText = (text) => {
         if (!ttsEnabled || typeof window === 'undefined' || !window.speechSynthesis) return
@@ -104,9 +104,8 @@ export default function CoachTerminal({ apiBase, token, config, onExit, addToast
         reader.readAsDataURL(file)
     }
 
-    const handleSend = async () => {
+    const handleSend = () => {
         if (!input.trim() && !attachedImage) return
-        if (thinking) return
 
         if (isListening) {
             recognitionRef.current?.stop()
@@ -129,82 +128,60 @@ export default function CoachTerminal({ apiBase, token, config, onExit, addToast
             ...messages,
             { role: 'user', content: userText || '📸 [Diagram Attached]', parts: userMsgParts, previewUrl: attachedImage?.previewUrl }
         ]
-        setMessages(newMessages)
+        
+        const newQaPairs = [
+            ...qaPairs,
+            { question: questions[currentQIndex], answer: userText || '📸 [Diagram Attached]' }
+        ]
+        
+        setQaPairs(newQaPairs)
         setAttachedImage(null)
-        setThinking(true)
 
-        try {
-            const res = await axios.post(`${apiBase}/coach/chat`, {
-                provider: config.provider,
-                api_key: config.api_key,
-                model: config.model,
-                messages: newMessages,
-                system_prompt: config.system_prompt
-            }, {
-                headers: { Authorization: `Bearer ${token}` }
-            })
-
-            const replyText = res.data.content
-            const newTokens = res.data.tokens || 0
-
-            setMessages([...newMessages, { role: 'coach', content: replyText }])
-            setTokens(t => t + newTokens)
-            if (/Q\d+|question\s*\d+/i.test(replyText)) setQuestionNum(q => q + 1)
-
-            speakText(replyText)
-        } catch (err) {
-            addToast(err.response?.data?.detail || 'Inference error. Verify API Key or rate limits.', 'error')
-        } finally {
-            setThinking(false)
+        const nextIndex = currentQIndex + 1
+        if (nextIndex < questions.length) {
+            newMessages.push({ role: 'coach', content: questions[nextIndex] })
+            setCurrentQIndex(nextIndex)
+        } else {
+            setCurrentQIndex(nextIndex) // Indicates we are done
+            newMessages.push({ role: 'coach', content: 'Session Complete! You can now submit your responses for evaluation.' })
         }
+        
+        setMessages(newMessages)
     }
 
-    const handleScorecard = async () => {
-        setEvaluating(true)
-        addToast('Analyzing trajectory against hiring bar...', 'info')
-        try {
-            const res = await axios.post(`${apiBase}/coach/scorecard`, {
-                provider: config.provider,
-                api_key: config.api_key,
-                model: config.model,
-                messages,
-                elapsed: formatTimer(elapsedSeconds),
-                question_num: questionNum,
-                system_prompt: config.system_prompt
-            }, {
-                headers: { Authorization: `Bearer ${token}` }
-            })
-            setScorecardModal(res.data.content)
-            setTokens(t => t + (res.data.tokens || 0))
-        } catch (err) {
-            addToast(err.response?.data?.detail || 'Scorecard analysis failed', 'error')
-        } finally {
-            setEvaluating(false)
-        }
-    }
-
-    const handleEndReport = async () => {
+    const handleBatchEvaluate = async () => {
         setEvaluating(true)
         addToast('Generating exhaustive final evaluation report...', 'info')
         try {
-            const res = await axios.post(`${apiBase}/coach/end-report`, {
+            const res = await axios.post(`${apiBase}/coach/batch-evaluate`, {
                 provider: config.provider,
                 api_key: config.api_key,
                 model: config.model,
-                messages,
+                qa_pairs: qaPairs,
                 mode_name: config.mode,
                 role: config.role,
                 level_name: config.level,
                 elapsed: formatTimer(elapsedSeconds),
-                question_num: questionNum,
                 jd: config.jd,
                 resume: config.resume,
-                system_prompt: config.system_prompt
             }, {
                 headers: { Authorization: `Bearer ${token}` }
             })
-            setFinalReportModal(res.data.content)
+            
+            const analyticsRes = await axios.post(`${apiBase}/coach/analytics`, {
+                report_text: res.data.content,
+                mode_name: config.mode,
+                role: config.role,
+                level_name: config.level,
+                elapsed: formatTimer(elapsedSeconds),
+                question_num: qaPairs.length,
+                jd: config.jd,
+                resume: config.resume,
+                messages: qaPairs
+            }, { headers: { Authorization: `Bearer ${token}` } })
+
             setTokens(t => t + (res.data.tokens || 0))
+            onComplete(analyticsRes.data)
         } catch (err) {
             addToast(err.response?.data?.detail || 'Final report generation failed', 'error')
         } finally {
@@ -212,17 +189,7 @@ export default function CoachTerminal({ apiBase, token, config, onExit, addToast
         }
     }
 
-    const downloadReportTxt = () => {
-        if (!finalReportModal) return
-        const header = `Viva-Verse Production Evaluation Report\n========================================\nArena: ${config.mode.toUpperCase()}\nCandidate Role: ${config.role} (${config.level})\nDuration: ${formatTimer(elapsedSeconds)}\nQuestions: ${questionNum}\n========================================\n\n`
-        const blob = new Blob([header + finalReportModal], { type: 'text/plain' })
-        const url = URL.createObjectURL(blob)
-        const a = document.createElement('a')
-        a.href = url
-        a.download = `VivaVerse-Report-${config.role.replace(/\s+/g, '_')}.txt`
-        a.click()
-        URL.revokeObjectURL(url)
-    }
+    const isComplete = currentQIndex >= questions.length
 
     return (
         <div className="min-h-screen bg-black text-zinc-100 flex flex-col fade-in-up">
@@ -246,7 +213,7 @@ export default function CoachTerminal({ apiBase, token, config, onExit, addToast
                         <span>⏱️</span> <span className="text-white font-bold">{formatTimer(elapsedSeconds)}</span>
                     </div>
                     <div className="flex items-center gap-1.5 text-zinc-400">
-                        <span>🎯</span> <span className="text-white font-bold">Q{questionNum}</span>
+                        <span>🎯</span> <span className="text-white font-bold">Q{Math.min(currentQIndex + 1, questions.length)}/{questions.length}</span>
                     </div>
                     <div className="flex items-center gap-1.5 text-zinc-400">
                         <span>⚡</span> <span className="text-brand-400 font-bold">{tokens.toLocaleString()} tok</span>
@@ -289,13 +256,13 @@ export default function CoachTerminal({ apiBase, token, config, onExit, addToast
                     )
                 })}
 
-                {thinking && (
+                {evaluating && (
                     <div className="flex justify-start fade-in-up">
                         <div className="bg-zinc-900 border border-zinc-800 rounded-2xl rounded-bl-xs px-5 py-4 flex items-center gap-3">
-                            <div className="w-2 h-2 rounded-full bg-white animate-bounce"></div>
-                            <div className="w-2 h-2 rounded-full bg-white animate-bounce [animation-delay:0.2s]"></div>
-                            <div className="w-2 h-2 rounded-full bg-white animate-bounce [animation-delay:0.4s]"></div>
-                            <span className="text-xs text-zinc-400 ml-1">Interrogating response & formulating probe...</span>
+                            <div className="w-2 h-2 rounded-full bg-brand-400 animate-bounce"></div>
+                            <div className="w-2 h-2 rounded-full bg-brand-400 animate-bounce [animation-delay:0.2s]"></div>
+                            <div className="w-2 h-2 rounded-full bg-brand-400 animate-bounce [animation-delay:0.4s]"></div>
+                            <span className="text-xs text-brand-300 ml-1 font-bold">Evaluating full session & generating remediation plan...</span>
                         </div>
                     </div>
                 )}
@@ -308,34 +275,30 @@ export default function CoachTerminal({ apiBase, token, config, onExit, addToast
                     {/* Action Trays */}
                     <div className="flex items-center justify-between">
                         <div className="flex items-center gap-3">
-                            <button
-                                onClick={handleScorecard}
-                                disabled={evaluating}
-                                className="px-4 py-2 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-zinc-200 border border-zinc-700 text-xs font-medium transition flex items-center gap-1.5 disabled:opacity-50"
-                            >
-                                <span>📊</span> Mid-Session Scorecard
-                            </button>
-                            <button
-                                onClick={handleEndReport}
-                                disabled={evaluating}
-                                className="px-4 py-2 rounded-xl bg-white text-black hover:bg-zinc-200 border border-white text-xs font-bold transition flex items-center gap-1.5 disabled:opacity-50 shadow-sm"
-                            >
-                                <span>🏁</span> End & Get Final Report
-                            </button>
+                            {isComplete && (
+                                <button
+                                    onClick={handleBatchEvaluate}
+                                    disabled={evaluating}
+                                    className="px-6 py-2.5 rounded-xl bg-green-600 hover:bg-green-500 text-white text-xs font-bold transition flex items-center gap-1.5 disabled:opacity-50 shadow-[0_0_15px_rgba(16,185,129,0.3)] border border-green-400 uppercase tracking-wider"
+                                >
+                                    <span>🏁</span> Evaluate Session & Get Final Report
+                                </button>
+                            )}
                         </div>
 
                         {/* Attachment & Voice */}
                         <div className="flex items-center gap-2">
-                            <label className="px-3.5 py-2 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-zinc-300 border border-white/5 text-xs font-medium cursor-pointer transition flex items-center gap-1.5">
+                            <label className={`px-3.5 py-2 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-zinc-300 border border-white/5 text-xs font-medium cursor-pointer transition flex items-center gap-1.5 ${isComplete ? 'opacity-50 pointer-events-none' : ''}`}>
                                 <span>📎</span> {attachedImage ? 'Sketch Attached' : 'Attach Sketch'}
-                                <input type="file" onChange={handleImageUpload} accept="image/*" className="hidden" />
+                                <input type="file" onChange={handleImageUpload} accept="image/*" className="hidden" disabled={isComplete} />
                             </label>
                             <button
                                 onClick={toggleMic}
+                                disabled={isComplete}
                                 className={`px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5 border ${isListening
                                         ? 'bg-rose-500 text-white border-rose-400 animate-pulse shadow-[0_0_15px_rgba(244,63,94,0.5)]'
                                         : 'bg-zinc-900 hover:bg-zinc-800 text-zinc-300 border-white/5'
-                                    }`}
+                                    } ${isComplete ? 'opacity-50 pointer-events-none' : ''}`}
                             >
                                 <span>🎙️</span> {isListening ? 'Listening...' : 'Voice Mic'}
                             </button>
@@ -356,65 +319,20 @@ export default function CoachTerminal({ apiBase, token, config, onExit, addToast
                             onChange={e => setInput(e.target.value)}
                             onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(); } }}
                             rows={2}
-                            placeholder={`Type your defense to Q${questionNum} (or click Voice Mic)...`}
-                            className="flex-1 bg-zinc-950 border border-zinc-800 rounded-xl p-4 text-sm text-white placeholder-zinc-600 focus:outline-none focus:border-zinc-500 transition-colors shadow-inner resize-none"
+                            disabled={isComplete}
+                            placeholder={isComplete ? "Session complete. Click 'Evaluate Session' to get your report." : `Type your defense to Q${currentQIndex + 1} (or click Voice Mic)...`}
+                            className="flex-1 bg-zinc-950 border border-zinc-800 rounded-xl p-4 text-sm text-white placeholder-zinc-600 focus:outline-none focus:border-zinc-500 transition-colors shadow-inner resize-none disabled:opacity-50"
                         />
                         <button
                             onClick={handleSend}
-                            disabled={thinking || (!input.trim() && !attachedImage)}
+                            disabled={isComplete || (!input.trim() && !attachedImage)}
                             className="btn-primary px-8 flex items-center justify-center font-bold text-sm uppercase tracking-wider disabled:opacity-40"
                         >
-                            Submit →
+                            Next →
                         </button>
                     </div>
                 </div>
             </div>
-
-            {/* Mid-Session Scorecard Modal */}
-            {scorecardModal && (
-                <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-4 fade-in-up">
-                    <div className="bg-zinc-950 max-w-2xl w-full max-h-[85vh] overflow-y-auto rounded-3xl p-6 sm:p-8 border border-zinc-800 relative shadow-2xl">
-                        <button onClick={() => setScorecardModal(null)} className="absolute top-6 right-6 text-zinc-500 hover:text-white text-lg font-bold">✕</button>
-                        <h3 className="text-xl font-bold text-white mb-4 flex items-center gap-2">
-                            <span>📊</span> Mid-Session Progress Shading
-                        </h3>
-                        <div className="text-xs sm:text-sm text-zinc-300 whitespace-pre-wrap leading-relaxed bg-black p-5 rounded-2xl border border-zinc-900 font-mono">
-                            {scorecardModal}
-                        </div>
-                        <div className="mt-6 flex justify-end">
-                            <button onClick={() => setScorecardModal(null)} className="btn-primary px-6 py-2.5 text-xs uppercase font-bold">
-                                Resume Arena →
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            )}
-
-            {/* Final Exhaustive Report Modal */}
-            {finalReportModal && (
-                <div className="fixed inset-0 z-50 bg-black/90 backdrop-blur-xl flex items-center justify-center p-4 fade-in-up">
-                    <div className="bg-zinc-950 max-w-3xl w-full max-h-[90vh] overflow-y-auto rounded-3xl p-6 sm:p-10 border border-zinc-800 relative shadow-[0_0_50px_rgba(0,0,0,0.9)]">
-                        <button onClick={onExit} className="absolute top-6 right-6 text-zinc-500 hover:text-white text-lg font-bold">✕</button>
-                        <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/10 text-white text-[10px] font-bold uppercase mb-4 tracking-widest border border-white/10">
-                            🏁 Final Verdict & Scorecard
-                        </div>
-                        <h3 className="text-2xl sm:text-3xl font-extrabold text-white mb-6 tracking-tight">
-                            Executive Interrogation Report
-                        </h3>
-                        <div className="text-xs sm:text-sm text-zinc-200 whitespace-pre-wrap leading-relaxed bg-black p-6 rounded-2xl border border-zinc-900 font-mono mb-8">
-                            {finalReportModal}
-                        </div>
-                        <div className="flex items-center justify-between">
-                            <button onClick={downloadReportTxt} className="px-6 py-3 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-zinc-200 font-bold text-xs uppercase tracking-wider border border-zinc-800 transition flex items-center gap-2">
-                                <span>📥</span> Download Text Report (.txt)
-                            </button>
-                            <button onClick={onExit} className="btn-primary px-8 py-3 text-xs uppercase font-bold">
-                                Return to Setup Studio
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            )}
         </div>
     )
 }
