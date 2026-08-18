@@ -1,19 +1,16 @@
 import { useState, useEffect } from 'react'
-import UploadView from './components/UploadView'
-import VivaTerminal from './components/VivaTerminal'
 import CoachTerminal from './components/CoachTerminal'
 import SetupStudio from './components/SetupStudio'
-import Dashboard from './components/Dashboard'
+import CoachDashboard from './components/CoachDashboard'
 import Toast from './components/Toast'
 import LoginView from './components/LoginView'
 import HistoryView from './components/HistoryView'
+import InterviewExperiences from './components/InterviewExperiences'
 
 const API = 'http://localhost:8000/api/v1'
 
 function App() {
-    const [view, setView] = useState('studio') // 'login' | 'studio' | 'upload' | 'viva' | 'coach' | 'dashboard' | 'history'
-    const [sessionId, setSessionId] = useState(null)
-    const [questions, setQuestions] = useState([])
+    const [view, setView] = useState('studio') // 'login' | 'studio' | 'coach' | 'dashboard' | 'history'
     const [analytics, setAnalytics] = useState(null)
     const [toasts, setToasts] = useState([])
     const [token, setToken] = useState('free-passthrough-token')
@@ -33,7 +30,6 @@ function App() {
         setToken(null);
         setUser(null);
         setView('login');
-        setSessionId(null);
         setAnalytics(null);
     };
 
@@ -47,22 +43,10 @@ function App() {
         setToasts(prev => prev.filter(t => t.id !== id))
     }
 
-    const handleEngineReady = (data) => {
-        setSessionId(data.session_id)
-        setQuestions(data.questions)
-        setView('viva')
-    }
-
-    const handleVivaComplete = (data) => {
-        setAnalytics(data)
-        setView('dashboard')
-    }
-
     const handleRestart = () => {
         setView('studio')
-        setSessionId(null)
-        setQuestions([])
         setAnalytics(null)
+        setCoachConfig(null)
     }
 
     const handleReviewSession = (sessionData) => {
@@ -101,6 +85,12 @@ function App() {
                             >
                                 📜 Archives
                             </button>
+                            <button
+                                onClick={() => setView('experiences')}
+                                className={`text-xs font-bold px-3.5 py-2 rounded-xl border transition-all ${view === 'experiences' ? 'bg-white text-black border-white shadow-[0_0_15px_rgba(255,255,255,0.2)]' : 'bg-transparent text-zinc-400 border-zinc-800 hover:text-white hover:border-zinc-700'}`}
+                            >
+                                🏢 Interview Experiences
+                            </button>
                             <div className="h-4 w-px bg-zinc-800"></div>
                             <div className="flex items-center gap-2">
                                 <div className="w-7 h-7 rounded-full bg-zinc-900 text-zinc-200 flex items-center justify-center text-xs font-extrabold border border-zinc-700 uppercase">
@@ -124,7 +114,6 @@ function App() {
                         token={token}
                         user={user}
                         onStartCoach={(cfg) => { setCoachConfig(cfg); setView('coach'); }}
-                        onStartDocumentDefense={(cfg) => { setByokConfig(cfg); setView('upload'); }}
                         addToast={addToast}
                     />
                 )}
@@ -134,22 +123,13 @@ function App() {
                         token={token}
                         config={coachConfig}
                         onExit={() => setView('studio')}
+                        onComplete={(data) => { setAnalytics(data); setView('dashboard'); }}
                         addToast={addToast}
                     />
                 )}
                 {view === 'history' && <HistoryView apiBase={API} token={token} onReviewSession={handleReviewSession} onBack={() => setView('studio')} addToast={addToast} />}
-                {view === 'upload' && <UploadView apiBase={API} token={token} onReady={handleEngineReady} addToast={addToast} />}
-                {view === 'viva' && (
-                    <VivaTerminal
-                        apiBase={API}
-                        token={token}
-                        sessionId={sessionId}
-                        questions={questions}
-                        onComplete={handleVivaComplete}
-                        addToast={addToast}
-                    />
-                )}
-                {view === 'dashboard' && <Dashboard apiBase={API} token={token} analytics={analytics} onRestart={handleRestart} />}
+                {view === 'dashboard' && <CoachDashboard apiBase={API} token={token} analytics={analytics} onRestart={handleRestart} />}
+                {view === 'experiences' && <InterviewExperiences apiBase={API} token={token} user={user} addToast={addToast} onBack={() => setView('studio')} />}
             </main>
         </div>
     )
