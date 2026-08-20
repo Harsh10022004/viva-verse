@@ -5,7 +5,6 @@ import urllib.error
 from typing import List, Dict, Any, Optional
 
 from app.services.chunking_engine import estimate_tokens
-from app.services.llm_service import SBERTSingleton
 from sklearn.metrics.pairwise import cosine_similarity
 import numpy as np
 

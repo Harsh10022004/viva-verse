@@ -10,8 +10,8 @@ from app.database_models import InterviewQuestion
 logger = logging.getLogger(__name__)
 
 class VectorStore:
-    def __init__(self, dimension: int = 384):
-        # 384 is default for all-MiniLM-L6-v2
+    def __init__(self, dimension: int = 768):
+        # 768 matches gemini-embedding-001 output_dimensionality
         self.dimension = dimension
         self.index = faiss.IndexFlatIP(dimension) # Inner product for cosine similarity (assuming normalized vectors)
         self.id_map = {} # Maps FAISS internal index ID to question UUID

@@ -1,46 +1,51 @@
 import logging
+import os
 import re
 import random
 import threading
 from typing import List, Dict, Optional
 import numpy as np
 
-from sentence_transformers import SentenceTransformer
 from sklearn.metrics.pairwise import cosine_similarity
 from app.utils.constants import STOPWORDS
 
 logger = logging.getLogger(__name__)
 
 class SBERTSingleton:
-    """Loads the SBERT model exactly once and reuses it globally."""
+    """Gemini-backed encoder with the same interface as the former SBERT model."""
     _instance: Optional["SBERTSingleton"] = None
     _lock: threading.Lock = threading.Lock()
 
     def __new__(cls):
         if cls._instance is None:
             with cls._lock:
-                # Double-check locking pattern
                 if cls._instance is None:
                     instance = super().__new__(cls)
-                    logger.info("[INFO] Loading SBERT model (all-MiniLM-L6-v2) …")
                     try:
-                        # Disable HuggingFace tqdm progress bars which cause OSError 22 on Windows sys.stderr.flush()
-                        from transformers.utils import logging as hf_logging
-                        hf_logging.disable_progress_bar()
-                        
-                        instance._model = SentenceTransformer("all-MiniLM-L6-v2")
-                        logger.info("[SUCCESS] SBERT model loaded.")
+                        from google import genai
+                        instance._client = genai.Client(api_key=os.environ.get("GEMINI_API_KEY"))
+                        logger.info("[SUCCESS] Gemini embedding client initialized.")
                         cls._instance = instance
                     except Exception as e:
-                        logger.error(f"[ERROR] Failed to load SBERT model: {e}")
+                        logger.error(f"[ERROR] Failed to init Gemini embedding client: {e}")
                         raise e
         return cls._instance
 
-
     def encode(self, texts: List[str]) -> np.ndarray:
-        if getattr(self, "_model", None) is None:
-            raise RuntimeError("SBERT model is not loaded correctly.")
-        return self._model.encode(texts, convert_to_numpy=True, show_progress_bar=False)
+        from google import genai
+        embeddings = []
+        for text in texts:
+            try:
+                result = self._client.models.embed_content(
+                    model="gemini-embedding-001",
+                    contents=text,
+                    config={"output_dimensionality": 768}
+                )
+                embeddings.append(result.embeddings[0].values)
+            except Exception as e:
+                logger.error(f"[ERROR] Gemini embedding failed for text: {e}")
+                embeddings.append([0.0] * 768)
+        return np.array(embeddings, dtype=np.float32)
 
 class GeminiQGSingleton:
     """Uses Google Gemini API for highly accurate, dynamic question formulation."""
