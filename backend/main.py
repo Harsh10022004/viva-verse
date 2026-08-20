@@ -1,4 +1,7 @@
+import asyncio
 import logging
+import os
+import httpx
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -53,6 +56,19 @@ app.include_router(auth_router, prefix="/api/v1/auth", tags=["auth"])
 app.include_router(coach_router, prefix="/api/v1/coach", tags=["coach"])
 app.include_router(experience_router, prefix="/api/v1/interview-experiences", tags=["experiences"])
 
+async def _self_ping():
+    # Render free tier shuts down after ~50s of inactivity; ping every 40s to stay alive.
+    url = os.environ.get("RENDER_EXTERNAL_URL", "http://localhost:8000") + "/health"
+    async with httpx.AsyncClient() as client:
+        while True:
+            await asyncio.sleep(40)
+            try:
+                r = await client.get(url, timeout=10)
+                logger.info(f"[PING] {url} -> {r.status_code}")
+            except Exception as e:
+                logger.warning(f"[PING] health check failed: {e}")
+
+
 @app.on_event("startup")
 async def startup_event():
     logger.info("[INFO] Starting The Viva Verse API...")
@@ -68,6 +84,9 @@ async def startup_event():
         vector_store.initialize()
     except Exception as e:
         logger.error(f"[ERROR] Failed to init FAISS Vector Store: {e}")
+
+    asyncio.create_task(_self_ping())
+    logger.info("[INFO] Self-ping task started (every 40s).")
 
 if __name__ == "__main__":
     import uvicorn
