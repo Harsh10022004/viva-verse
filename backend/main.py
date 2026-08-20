@@ -2,9 +2,9 @@ import logging
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from app.api.v1.routes import router as api_router
 from app.api.v1.auth_routes import router as auth_router
 from app.api.v1.coach_routes import router as coach_router
+from app.api.v1.experience_routes import router as experience_router
 from app.database import engine, Base
 
 # Configure simple logging to stdout
@@ -34,6 +34,10 @@ app.add_middleware(
 # even when the backend crashes with an unhandled exception
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
+    import traceback
+    with open("error_log.txt", "w") as f:
+        f.write("".join(traceback.format_exception(type(exc), exc, exc.__traceback__)))
+        
     logger.error(f"[UNHANDLED ERROR] {type(exc).__name__}: {str(exc)}", exc_info=True)
     return JSONResponse(
         status_code=500,
@@ -41,13 +45,25 @@ async def global_exception_handler(request: Request, exc: Exception):
         headers={"Access-Control-Allow-Origin": "*"},
     )
 
-app.include_router(api_router, prefix="/api/v1")
 app.include_router(auth_router, prefix="/api/v1/auth", tags=["auth"])
 app.include_router(coach_router, prefix="/api/v1/coach", tags=["coach"])
+app.include_router(experience_router, prefix="/api/v1/interview-experiences", tags=["experiences"])
 
 @app.on_event("startup")
 async def startup_event():
     logger.info("[INFO] Starting The Viva Verse API...")
+    try:
+        from app.database import init_fts
+        init_fts()
+        logger.info("[INFO] SQLite FTS5 initialized.")
+    except Exception as e:
+        logger.error(f"[ERROR] Failed to init FTS5: {e}")
+
+    try:
+        from app.services.vector_store import vector_store
+        vector_store.initialize()
+    except Exception as e:
+        logger.error(f"[ERROR] Failed to init FAISS Vector Store: {e}")
 
 if __name__ == "__main__":
     import uvicorn
