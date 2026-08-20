@@ -7,7 +7,7 @@ import LoginView from './components/LoginView'
 import HistoryView from './components/HistoryView'
 import InterviewExperiences from './components/InterviewExperiences'
 
-const API = 'http://localhost:8000/api/v1'
+const API = import.meta.env.VITE_API_BASE
 
 function App() {
     const [view, setView] = useState('studio') // 'login' | 'studio' | 'coach' | 'dashboard' | 'history'
