@@ -2,12 +2,35 @@ import os
 from app.database import SessionLocal, init_fts, engine
 from app.database_models import InterviewExperience
 from app.services.vector_store import vector_store
+from app.services.embedding_service import generate_embedding
 from sqlalchemy import text
 import json
 
 def rebuild():
     db = SessionLocal()
-    
+
+    # 0. Regenerate embeddings via Gemini for any experience missing a 768-dim embedding
+    print("Regenerating embeddings via Gemini...")
+    experiences = db.query(InterviewExperience).all()
+    regen_count = 0
+    for e in experiences:
+        needs_regen = True
+        if e.embedding:
+            try:
+                emb = json.loads(e.embedding)
+                if len(emb) == 768:
+                    needs_regen = False
+            except Exception:
+                pass
+        if needs_regen:
+            text_to_embed = " ".join(filter(None, [e.company, e.role, e.topics, e.overall_experience]))
+            emb = generate_embedding(text_to_embed)
+            if emb:
+                e.embedding = json.dumps(emb)
+                regen_count += 1
+    db.commit()
+    print(f"Regenerated {regen_count} embeddings.")
+
     # 1. Rebuild FTS
     print("Rebuilding FTS...")
     try:
