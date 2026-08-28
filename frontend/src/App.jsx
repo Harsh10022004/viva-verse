@@ -7,22 +7,40 @@ import LoginView from './components/LoginView'
 import HistoryView from './components/HistoryView'
 import InterviewExperiences from './components/InterviewExperiences'
 
-const API = import.meta.env.VITE_API_BASE
+const API = import.meta.env.VITE_API_BASE || 'http://localhost:8000/api/v1'
 
 function App() {
-    const [view, setView] = useState('studio') // 'login' | 'studio' | 'coach' | 'dashboard' | 'history'
+    const [view, setView] = useState('experiences') // 'login' | 'studio' | 'coach' | 'dashboard' | 'history' | 'experiences'
     const [analytics, setAnalytics] = useState(null)
     const [toasts, setToasts] = useState([])
-    const [token, setToken] = useState('free-passthrough-token')
-    const [user, setUser] = useState({ id: 1, username: 'Candidate Explorer', role: 'student' })
+    const [token, setToken] = useState(localStorage.getItem('token') || null)
+    const [user, setUser] = useState(null)
     const [coachConfig, setCoachConfig] = useState(null)
     const [byokConfig, setByokConfig] = useState(null)
+
+    useEffect(() => {
+        if (token) {
+            fetch(`${API}/auth/me`, {
+                headers: { Authorization: `Bearer ${token}` }
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.id) setUser(data)
+                else handleLogout()
+            })
+            .catch(() => handleLogout())
+        } else {
+            // Default to login if no token? The user wants experiences as main highlight, 
+            // so we can allow unauthenticated access to experiences or force login.
+            // Let's not force login for experiences list, but require it for posting.
+        }
+    }, [token])
 
     const handleLogin = (newToken, userData) => {
         localStorage.setItem('token', newToken);
         setToken(newToken);
         setUser(userData);
-        setView('studio');
+        setView('experiences');
     };
 
     const handleLogout = () => {
@@ -102,7 +120,19 @@ function App() {
                                 Logout
                             </button>
                         </div>
-                    ) : null}
+                    ) : (
+                        <div className="flex items-center gap-4">
+                            <button
+                                onClick={() => setView('experiences')}
+                                className={`text-xs font-bold px-3.5 py-2 rounded-xl border transition-all ${view === 'experiences' ? 'bg-white text-black border-white shadow-[0_0_15px_rgba(255,255,255,0.2)]' : 'bg-transparent text-zinc-400 border-zinc-800 hover:text-white hover:border-zinc-700'}`}
+                            >
+                                🏢 Explore Experiences
+                            </button>
+                            <button onClick={() => setView('login')} className="text-xs text-white font-bold px-4 py-2 bg-blue-600 hover:bg-blue-500 rounded-lg transition">
+                                Login / Sign Up
+                            </button>
+                        </div>
+                    )}
                 </div>
             </header>
 
@@ -129,7 +159,7 @@ function App() {
                 )}
                 {view === 'history' && <HistoryView apiBase={API} token={token} onReviewSession={handleReviewSession} onBack={() => setView('studio')} addToast={addToast} />}
                 {view === 'dashboard' && <CoachDashboard apiBase={API} token={token} analytics={analytics} onRestart={handleRestart} />}
-                {view === 'experiences' && <InterviewExperiences apiBase={API} token={token} user={user} addToast={addToast} onBack={() => setView('studio')} />}
+                {view === 'experiences' && <InterviewExperiences apiBase={API} token={token} user={user} addToast={addToast} onBack={() => setView('studio')} onStartMock={(cfg) => { setCoachConfig(cfg); setView('coach'); }} />}
             </main>
         </div>
     )

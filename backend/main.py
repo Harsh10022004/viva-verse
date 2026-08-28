@@ -1,6 +1,10 @@
 import asyncio
 import logging
 import os
+from dotenv import load_dotenv
+
+# Load .env file before anything else
+load_dotenv()
 import httpx
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware

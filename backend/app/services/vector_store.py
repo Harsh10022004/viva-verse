@@ -5,17 +5,24 @@ import faiss
 import logging
 from typing import List, Dict, Any, Tuple
 from app.database import SessionLocal
-from app.database_models import InterviewQuestion
+from app.database import SessionLocal
 
 logger = logging.getLogger(__name__)
 
 class VectorStore:
-    def __init__(self, dimension: int = 768):
-        # 768 matches gemini-embedding-001 output_dimensionality
+    def __init__(self, dimension: int = 384):
+        # 384 matches SBERT all-MiniLM-L6-v2 output_dimensionality
         self.dimension = dimension
         self.index = faiss.IndexFlatIP(dimension) # Inner product for cosine similarity (assuming normalized vectors)
         self.id_map = {} # Maps FAISS internal index ID to question UUID
         self.uuid_to_index = {} # Maps question UUID to FAISS internal index ID
+        self.is_initialized = False
+
+    def clear(self):
+        """Clear the FAISS index."""
+        self.index = faiss.IndexFlatIP(self.dimension)
+        self.id_map = {}
+        self.uuid_to_index = {}
         self.is_initialized = False
 
     def initialize(self):
@@ -25,25 +32,23 @@ class VectorStore:
 
         db = SessionLocal()
         try:
-            questions = db.query(InterviewQuestion).filter(InterviewQuestion.embedding.isnot(None)).all()
-            if not questions:
-                self.is_initialized = True
-                return
+            from app.database_models import InterviewExperience
+            experiences = db.query(InterviewExperience).filter(InterviewExperience.embedding.isnot(None)).all()
 
             vectors = []
-            for q in questions:
+
+            for e in experiences:
                 try:
-                    vec = json.loads(q.embedding)
+                    vec = json.loads(e.embedding)
                     if len(vec) == self.dimension:
-                        # Normalize vector for cosine similarity with IndexFlatIP
-                        v = np.array(vec, dtype=np.float32)
-                        faiss.normalize_L2(v.reshape(1, -1))
-                        vectors.append(v)
+                        v = np.array(vec, dtype=np.float32).reshape(1, -1)
+                        faiss.normalize_L2(v)
+                        vectors.append(v[0])
                         idx = len(self.id_map)
-                        self.id_map[idx] = q.id
-                        self.uuid_to_index[q.id] = idx
-                except Exception as e:
-                    logger.warning(f"Failed to load embedding for question {q.id}: {e}")
+                        self.id_map[idx] = e.id
+                        self.uuid_to_index[e.id] = idx
+                except Exception as ex:
+                    logger.warning(f"Failed to load embedding for experience {e.id}: {ex}")
 
             if vectors:
                 vectors_np = np.vstack(vectors)

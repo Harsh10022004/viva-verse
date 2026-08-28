@@ -18,6 +18,31 @@ class LoginRequest(BaseModel):
     username: str
     password: str
 
+class SignupRequest(BaseModel):
+    username: str
+    email: str
+    password: str
+
+@router.post("/signup")
+async def signup(req: SignupRequest, db: Session = Depends(get_db)):
+    from app.utils.auth import get_password_hash
+    # Check if user exists
+    existing = db.query(User).filter((User.username == req.username) | (User.email == req.email)).first()
+    if existing:
+        raise HTTPException(status_code=400, detail="Username or email already registered")
+        
+    user = User(
+        username=req.username,
+        email=req.email,
+        hashed_password=get_password_hash(req.password),
+        role="student"
+    )
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+    
+    return {"message": "User created successfully", "user_id": user.id}
+
 @router.post("/login", response_model=Token)
 async def login_for_access_token(req: LoginRequest, db: Session = Depends(get_db)):
     user = db.query(User).filter(User.username == req.username).first()

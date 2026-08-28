@@ -737,3 +737,65 @@ def get_session_detail(session_id: str, current_user: User = Depends(get_current
         "weaknesses": json.loads(session.weaknesses_json) if session.weaknesses_json else None
     }
 
+class TopKGenerateRequest(BaseModel):
+    provider: str
+    api_key: str
+    model: Optional[str] = None
+    experience_ids: List[str]
+    jd: Optional[str] = None
+    resume: Optional[str] = None
+
+@router.post("/generate-topk-questions")
+def generate_topk_questions(req: TopKGenerateRequest, db: Session = Depends(get_db)):
+    """Generate mock interview questions based on Top K semantic results."""
+    from app.database_models import InterviewExperience
+    
+    experiences = db.query(InterviewExperience).filter(InterviewExperience.id.in_(req.experience_ids)).all()
+    if not experiences:
+        raise HTTPException(status_code=404, detail="No experiences found")
+        
+    full_text = ""
+    for e in experiences:
+        full_text += f"Company: {e.company}, Role: {e.role}\n"
+        if e.overall_experience:
+            full_text += f"Overall Experience: {e.overall_experience}\n"
+        for r in e.rounds:
+            for q in r.questions:
+                full_text += f"- {q.question_text}\n"
+        full_text += "\n---\n"
+        
+    prompt = "You are an expert technical interviewer.\n"
+    prompt += "I am providing you with several past interview experiences (the 'Top K' semantic matches for my query).\n"
+    prompt += "Based on these real experiences, generate exactly 5 strict and highly targeted interview questions.\n"
+    if req.jd:
+        prompt += f"\nTailor the questions to this Job Description:\n{req.jd}\n"
+    if req.resume:
+        prompt += f"\nCross-examine the candidate's Resume to find weaknesses related to the experiences:\n{req.resume}\n"
+        
+    prompt += "\nPast Experiences:\n" + full_text
+    prompt += "\nOutput your response as a strict JSON array of strings, exactly 5 questions. Do not include markdown formatting or extra text."
+    
+    messages = [{"role": "user", "parts": [{"text": prompt}]}]
+    
+    result = call_llm_sync(req.provider, req.api_key.strip(), messages, req.model)
+    if result["status"] == "error":
+        raise HTTPException(status_code=500, detail=result["message"])
+        
+    raw_content = result["content"]
+    cleaned = re.sub(r'```json\s*', '', raw_content)
+    cleaned = re.sub(r'```\s*', '', cleaned).strip()
+    
+    questions = []
+    try:
+        parsed = json.loads(cleaned)
+        if isinstance(parsed, list):
+            questions = parsed
+        else:
+            questions = [str(parsed)]
+    except Exception as e:
+        logger.error(f"[JSON PARSE ERROR] Could not parse LLM output: {raw_content}")
+        questions = [q.strip() for q in raw_content.split('\n') if q.strip() and len(q) > 5][:5]
+        if not questions:
+            questions = ["Could you explain your background?", "What was the hardest problem you solved?"]
+            
+    return {"questions": questions[:5]}

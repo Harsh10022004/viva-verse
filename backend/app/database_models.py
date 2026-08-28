@@ -19,6 +19,7 @@ class User(Base):
 
     sessions = relationship("VivaSession", back_populates="user")
     experiences = relationship("InterviewExperience", back_populates="user")
+    subscriptions = relationship("SearchSubscription")
 
 class VivaSession(Base):
     __tablename__ = "viva_sessions"
@@ -50,6 +51,9 @@ class InterviewExperience(Base):
     level = Column(String, index=True, nullable=False)
     interview_date = Column(String, nullable=True)
     overall_experience = Column(Text, nullable=True)
+    source = Column(String, default="platform") # "platform" or "ingested"
+    topics = Column(String, nullable=True) # Comma-separated string
+    embedding = Column(Text, nullable=True) # JSON serialized float array for FAISS
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -80,3 +84,15 @@ class InterviewQuestion(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     round = relationship("InterviewRound", back_populates="questions")
+
+class SearchSubscription(Base):
+    __tablename__ = "search_subscriptions"
+
+    id = Column(String, primary_key=True, index=True, default=generate_uuid)
+    user_id = Column(String, ForeignKey("users.id"), nullable=True) # Optional for non-logged in users if we allow them to subscribe with email/whatsapp
+    query_text = Column(String, index=True, nullable=False)
+    query_embedding = Column(Text, nullable=True) # JSON serialized float array
+    threshold_score = Column(Float, nullable=False)
+    contact_email = Column(String, nullable=True)
+    contact_whatsapp = Column(String, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)

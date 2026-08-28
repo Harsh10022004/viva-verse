@@ -365,3 +365,24 @@ def evaluate_answer(
     )
 
     return {"score": score, "critique": critique}
+
+def generate_ai_summary(experiences_text: str) -> str:
+    """Generate insights and a summary from a set of interview experiences."""
+    try:
+        from google import genai
+        import os
+        client = genai.Client(api_key=os.environ.get("GEMINI_API_KEY"))
+        
+        prompt = "You are an expert tech recruiter and career coach. I will provide you with several interview experiences.\n"
+        prompt += "Please summarize the core insights, common topics/questions asked, and the overall difficulty/vibe of the interviews.\n"
+        prompt += "Keep the summary professional, highly readable (using markdown bullets), and concise (around 200 words max).\n\n"
+        prompt += "Experiences:\n" + experiences_text
+        
+        response = client.models.generate_content(
+            model='gemini-3.7-flash',
+            contents=prompt
+        )
+        return response.text.strip()
+    except Exception as e:
+        logger.error(f"[ERROR] AI Summary generation failed: {e}")
+        return "Could not generate insights at this time. Please make sure the AI is configured properly."

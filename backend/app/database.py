@@ -49,4 +49,39 @@ def init_fts():
                 INSERT INTO interview_questions_fts(rowid, id, question_text) VALUES (new.rowid, new.id, new.question_text);
             END;
         """))
+        
+        # New FTS table for interview experiences
+        conn.execute(text("""
+            CREATE VIRTUAL TABLE IF NOT EXISTS interview_experiences_fts USING fts5(
+                id UNINDEXED,
+                company,
+                role,
+                topics,
+                overall_experience,
+                content='interview_experiences',
+                content_rowid='rowid'
+            )
+        """))
+        
+        # Triggers to keep FTS table in sync with interview_experiences table
+        conn.execute(text("""
+            CREATE TRIGGER IF NOT EXISTS interview_experiences_ai AFTER INSERT ON interview_experiences BEGIN
+                INSERT INTO interview_experiences_fts(rowid, id, company, role, topics, overall_experience) 
+                VALUES (new.rowid, new.id, new.company, new.role, new.topics, new.overall_experience);
+            END;
+        """))
+        conn.execute(text("""
+            CREATE TRIGGER IF NOT EXISTS interview_experiences_ad AFTER DELETE ON interview_experiences BEGIN
+                INSERT INTO interview_experiences_fts(interview_experiences_fts, rowid, id, company, role, topics, overall_experience) 
+                VALUES('delete', old.rowid, old.id, old.company, old.role, old.topics, old.overall_experience);
+            END;
+        """))
+        conn.execute(text("""
+            CREATE TRIGGER IF NOT EXISTS interview_experiences_au AFTER UPDATE ON interview_experiences BEGIN
+                INSERT INTO interview_experiences_fts(interview_experiences_fts, rowid, id, company, role, topics, overall_experience) 
+                VALUES('delete', old.rowid, old.id, old.company, old.role, old.topics, old.overall_experience);
+                INSERT INTO interview_experiences_fts(rowid, id, company, role, topics, overall_experience) 
+                VALUES (new.rowid, new.id, new.company, new.role, new.topics, new.overall_experience);
+            END;
+        """))
         conn.commit()
