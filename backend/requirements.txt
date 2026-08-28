@@ -11,4 +11,3 @@ sqlalchemy>=2.0.0
 bcrypt>=4.0.0
 pyjwt>=2.8.0
 httpx
-sentence-transformers>=2.2.2
