@@ -73,6 +73,25 @@ async def _self_ping():
                 logger.warning(f"[PING] health check failed: {e}")
 
 
+def _auto_seed_on_startup() -> bool:
+    """Seed mock data when enabled and the experiences table is empty."""
+    auto_seed = os.environ.get("AUTO_SEED_ON_STARTUP", "true").lower() in {
+        "1",
+        "true",
+        "yes",
+    }
+    if not auto_seed:
+        logger.info("[INFO] AUTO_SEED_ON_STARTUP disabled — skipping seed check.")
+        return False
+
+    from seed_mock_data import run_seed
+
+    seeded = run_seed(force=False)
+    if seeded:
+        logger.info("[INFO] Startup seed completed.")
+    return seeded
+
+
 @app.on_event("startup")
 async def startup_event():
     logger.info("[INFO] Starting The Viva Verse API...")
@@ -84,7 +103,15 @@ async def startup_event():
         logger.error(f"[ERROR] Failed to init FTS5: {e}")
 
     try:
+        seeded = await asyncio.to_thread(_auto_seed_on_startup)
+    except Exception as e:
+        logger.error(f"[ERROR] Failed to run startup seed: {e}")
+        seeded = False
+
+    try:
         from app.services.vector_store import vector_store
+        if seeded:
+            vector_store.clear()
         vector_store.initialize()
     except Exception as e:
         logger.error(f"[ERROR] Failed to init FAISS Vector Store: {e}")

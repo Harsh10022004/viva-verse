@@ -1,3 +1,7 @@
+import os
+
+os.environ.setdefault("AUTO_SEED_ON_STARTUP", "false")
+
 import pytest
 from fastapi.testclient import TestClient
 
